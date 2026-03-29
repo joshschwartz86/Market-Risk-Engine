@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Portfolio id="BOOK_MIXED_001" asOfDate="2024-01-15">
+
+  <!-- Netting Sets -->
+  <NettingSet id="NS_RATES_001">
+    <TradeRef>IRS_001</TradeRef>
+    <TradeRef>IRS_002</TradeRef>
+    <TradeRef>SWPTN_001</TradeRef>
+    <TradeRef>CAP_001</TradeRef>
+  </NettingSet>
+
+  <NettingSet id="NS_FX_001">
+    <TradeRef>FXFWD_001</TradeRef>
+    <TradeRef>FXOPT_001</TradeRef>
+  </NettingSet>
+
+  <NettingSet id="NS_COMM_001">
+    <TradeRef>COMMSWP_001</TradeRef>
+    <TradeRef>COMMOPT_001</TradeRef>
+  </NettingSet>
+
+  <!-- =============================================================== -->
+  <!-- Interest Rate Swaps                                             -->
+  <!-- =============================================================== -->
+
+  <!-- Pay fixed 5y USD IRS -->
+  <Trade id="IRS_001" type="IRS">
+    <Currency>USD</Currency>
+    <Notional>10000000</Notional>
+    <EffectiveDate>2023-01-15</EffectiveDate>
+    <MaturityDate>2028-01-15</MaturityDate>
+    <FixedRate>0.0425</FixedRate>
+    <FixedDayCount>30360</FixedDayCount>
+    <FloatIndex>SOFR</FloatIndex>
+    <FloatDayCount>ACT360</FloatDayCount>
+    <PaymentFrequency>SEMIANNUAL</PaymentFrequency>
+    <PayReceive>PAY</PayReceive>
+    <DiscountCurveId>USD_SOFR</DiscountCurveId>
+    <ForwardCurveId>USD_SOFR</ForwardCurveId>
+  </Trade>
+
+  <!-- Receive fixed 10y EUR IRS -->
+  <Trade id="IRS_002" type="IRS">
+    <Currency>EUR</Currency>
+    <Notional>8000000</Notional>
+    <EffectiveDate>2022-07-15</EffectiveDate>
+    <MaturityDate>2032-07-15</MaturityDate>
+    <FixedRate>0.0290</FixedRate>
+    <FixedDayCount>30360</FixedDayCount>
+    <FloatIndex>ESTR</FloatIndex>
+    <FloatDayCount>ACT360</FloatDayCount>
+    <PaymentFrequency>ANNUAL</PaymentFrequency>
+    <PayReceive>RECEIVE</PayReceive>
+    <DiscountCurveId>EUR_ESTR</DiscountCurveId>
+    <ForwardCurveId>EUR_ESTR</ForwardCurveId>
+  </Trade>
+
+  <!-- =============================================================== -->
+  <!-- Swaption                                                        -->
+  <!-- =============================================================== -->
+
+  <!-- 1y into 5y payer swaption -->
+  <Trade id="SWPTN_001" type="Swaption">
+    <Currency>USD</Currency>
+    <Notional>5000000</Notional>
+    <OptionExpiry>2025-01-15</OptionExpiry>
+    <UnderlyingStart>2025-01-15</UnderlyingStart>
+    <UnderlyingMaturity>2030-01-15</UnderlyingMaturity>
+    <Strike>0.0450</Strike>
+    <OptionType>PAYER</OptionType>
+    <VolModel>black</VolModel>
+    <VolSurfaceId>USD_SWAPTION</VolSurfaceId>
+    <DiscountCurveId>USD_SOFR</DiscountCurveId>
+    <ForwardCurveId>USD_SOFR</ForwardCurveId>
+    <PaymentFrequency>SEMIANNUAL</PaymentFrequency>
+  </Trade>
+
+  <!-- =============================================================== -->
+  <!-- Cap / Floor                                                     -->
+  <!-- =============================================================== -->
+
+  <!-- 3y SOFR cap at 5.50% -->
+  <Trade id="CAP_001" type="CapFloor">
+    <Currency>USD</Currency>
+    <Notional>15000000</Notional>
+    <EffectiveDate>2024-01-15</EffectiveDate>
+    <MaturityDate>2027-01-15</MaturityDate>
+    <Strike>0.0550</Strike>
+    <OptionType>CAP</OptionType>
+    <FloatIndex>SOFR</FloatIndex>
+    <DayCount>ACT360</DayCount>
+    <PaymentFrequency>QUARTERLY</PaymentFrequency>
+    <VolSurfaceId>USD_SWAPTION</VolSurfaceId>
+    <DiscountCurveId>USD_SOFR</DiscountCurveId>
+    <ForwardCurveId>USD_SOFR</ForwardCurveId>
+  </Trade>
+
+  <!-- =============================================================== -->
+  <!-- FX Forward                                                      -->
+  <!-- =============================================================== -->
+
+  <!-- Buy EUR 3m forward -->
+  <Trade id="FXFWD_001" type="FXForward">
+    <BaseCurrency>EUR</BaseCurrency>
+    <QuoteCurrency>USD</QuoteCurrency>
+    <NotionalBase>3000000</NotionalBase>
+    <DeliveryDate>2024-04-17</DeliveryDate>
+    <ForwardRateContractual>1.0913</ForwardRateContractual>
+    <PayReceive>PAY</PayReceive>
+    <BaseDiscountCurveId>EUR_ESTR</BaseDiscountCurveId>
+    <QuoteDiscountCurveId>USD_SOFR</QuoteDiscountCurveId>
+    <FxRateId>EURUSD</FxRateId>
+  </Trade>
+
+  <!-- =============================================================== -->
+  <!-- FX Option                                                       -->
+  <!-- =============================================================== -->
+
+  <!-- 6m EUR call USD put -->
+  <Trade id="FXOPT_001" type="FXOption">
+    <BaseCurrency>EUR</BaseCurrency>
+    <QuoteCurrency>USD</QuoteCurrency>
+    <NotionalBase>2000000</NotionalBase>
+    <ExpiryDate>2024-07-15</ExpiryDate>
+    <DeliveryDate>2024-07-17</DeliveryDate>
+    <Strike>1.0950</Strike>
+    <OptionType>CALL</OptionType>
+    <VolSurfaceId>EURUSD</VolSurfaceId>
+    <BaseDiscountCurveId>EUR_ESTR</BaseDiscountCurveId>
+    <QuoteDiscountCurveId>USD_SOFR</QuoteDiscountCurveId>
+    <FxRateId>EURUSD</FxRateId>
+  </Trade>
+
+  <!-- =============================================================== -->
+  <!-- Commodity Swap                                                  -->
+  <!-- =============================================================== -->
+
+  <!-- 1y WTI fixed-for-floating swap, pay fixed -->
+  <Trade id="COMMSWP_001" type="CommoditySwap">
+    <CommodityId>WTI</CommodityId>
+    <NotionalQuantity>50000</NotionalQuantity>
+    <EffectiveDate>2024-01-15</EffectiveDate>
+    <MaturityDate>2025-01-15</MaturityDate>
+    <FixedPrice>71.50</FixedPrice>
+    <PayReceive>PAY</PayReceive>
+    <PaymentFrequency>QUARTERLY</PaymentFrequency>
+    <CommodityCurveId>WTI</CommodityCurveId>
+    <DiscountCurveId>USD_SOFR</DiscountCurveId>
+  </Trade>
+
+  <!-- =============================================================== -->
+  <!-- Commodity Futures Option                                        -->
+  <!-- =============================================================== -->
+
+  <!-- WTI call option on 3m futures -->
+  <Trade id="COMMOPT_001" type="CommodityFuturesOption">
+    <CommodityId>WTI</CommodityId>
+    <NotionalQuantity>10000</NotionalQuantity>
+    <FuturesMaturity>2024-04-17</FuturesMaturity>
+    <OptionExpiry>2024-04-10</OptionExpiry>
+    <Strike>73.00</Strike>
+    <OptionType>CALL</OptionType>
+    <VolSurfaceId>WTI_VOL</VolSurfaceId>
+    <DiscountCurveId>USD_SOFR</DiscountCurveId>
+    <CommodityCurveId>WTI</CommodityCurveId>
+  </Trade>
+
+</Portfolio>

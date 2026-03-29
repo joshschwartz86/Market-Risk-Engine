@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <!-- Root element -->
+  <xs:element name="Portfolio">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="NettingSet" type="NettingSetType" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="Trade" type="TradeType" minOccurs="1" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:attribute name="id" type="xs:string" use="required"/>
+      <xs:attribute name="asOfDate" type="xs:date" use="required"/>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- Netting Set -->
+  <xs:complexType name="NettingSetType">
+    <xs:sequence>
+      <xs:element name="TradeRef" type="xs:string" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <!-- Trade (open content — each type has its own child elements) -->
+  <xs:complexType name="TradeType">
+    <xs:sequence>
+      <xs:any minOccurs="0" maxOccurs="unbounded" processContents="lax"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required"/>
+    <xs:attribute name="type" type="xs:string" use="required"/>
+  </xs:complexType>
+
+</xs:schema>
