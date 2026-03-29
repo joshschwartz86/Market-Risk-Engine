@@ -10,8 +10,8 @@ from lxml import etree
 from ..common.enums import OptionType, PayReceive
 from ..common.exceptions import PortfolioParseError
 from .models import (
-    CapFloor, CommodityFuturesOption, CommoditySwap,
-    FXForward, FXOption, IRS, Portfolio, Swaption,
+    AmortizingIRS, CapFloor, CommodityFuturesOption, CommoditySwap,
+    FloatFloatSwap, FXForward, FXOption, IRS, Portfolio, Swaption,
 )
 
 
@@ -170,8 +170,72 @@ def _parse_commodity_futures_option(el: etree._Element, trade_id: str,
     )
 
 
+def _parse_amortizing_irs(el: etree._Element, trade_id: str,
+                           ns_id: Optional[str]) -> AmortizingIRS:
+    """
+    XML structure for amortizing notional schedule::
+
+        <NotionalSchedule>
+            <Entry date="2024-07-15" notional="8000000"/>
+            <Entry date="2025-01-15" notional="6000000"/>
+            ...
+        </NotionalSchedule>
+    """
+    sched_el = el.find("NotionalSchedule")
+    notional_schedule = []
+    if sched_el is not None:
+        for entry in sched_el.findall("Entry"):
+            entry_date = date.fromisoformat(entry.get("date", "").strip())
+            entry_notional = float(entry.get("notional", "0").strip())
+            notional_schedule.append((entry_date, entry_notional))
+
+    return AmortizingIRS(
+        trade_id=trade_id,
+        currency=_str(el, "Currency"),
+        initial_notional=_float(el, "InitialNotional"),
+        notional_schedule=notional_schedule,
+        effective_date=_date(el, "EffectiveDate"),
+        maturity_date=_date(el, "MaturityDate"),
+        fixed_rate=_float(el, "FixedRate"),
+        fixed_day_count=_str(el, "FixedDayCount"),
+        float_index=_str(el, "FloatIndex"),
+        float_day_count=_str(el, "FloatDayCount"),
+        payment_frequency=_str(el, "PaymentFrequency"),
+        pay_receive=PayReceive(_str(el, "PayReceive")),
+        discount_curve_id=_str(el, "DiscountCurveId"),
+        forward_curve_id=_str(el, "ForwardCurveId"),
+        netting_set_id=ns_id,
+    )
+
+
+def _parse_float_float_swap(el: etree._Element, trade_id: str,
+                             ns_id: Optional[str]) -> FloatFloatSwap:
+    return FloatFloatSwap(
+        trade_id=trade_id,
+        currency=_str(el, "Currency"),
+        notional=_float(el, "Notional"),
+        effective_date=_date(el, "EffectiveDate"),
+        maturity_date=_date(el, "MaturityDate"),
+        leg1_index=_str(el, "Leg1Index"),
+        leg1_day_count=_str(el, "Leg1DayCount"),
+        leg1_frequency=_str(el, "Leg1Frequency"),
+        leg1_forward_curve_id=_str(el, "Leg1ForwardCurveId"),
+        leg1_spread=float(el.findtext("Leg1Spread", "0").strip()),
+        leg2_index=_str(el, "Leg2Index"),
+        leg2_day_count=_str(el, "Leg2DayCount"),
+        leg2_frequency=_str(el, "Leg2Frequency"),
+        leg2_forward_curve_id=_str(el, "Leg2ForwardCurveId"),
+        leg2_spread=float(el.findtext("Leg2Spread", "0").strip()),
+        pay_receive=PayReceive(_str(el, "PayReceive")),
+        discount_curve_id=_str(el, "DiscountCurveId"),
+        netting_set_id=ns_id,
+    )
+
+
 _PARSERS = {
     "IRS": _parse_irs,
+    "AmortizingIRS": _parse_amortizing_irs,
+    "FloatFloatSwap": _parse_float_float_swap,
     "CapFloor": _parse_capfloor,
     "Swaption": _parse_swaption,
     "FXForward": _parse_fxforward,

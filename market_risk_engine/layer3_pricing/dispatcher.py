@@ -4,8 +4,8 @@ from __future__ import annotations
 from typing import Dict, List, Type
 
 from ..layer2_portfolio.models import (
-    CapFloor, CommodityFuturesOption, CommoditySwap,
-    FXForward, FXOption, IRS, Portfolio, Swaption, TradeUnion,
+    AmortizingIRS, CapFloor, CommodityFuturesOption, CommoditySwap,
+    FloatFloatSwap, FXForward, FXOption, IRS, Portfolio, Swaption, TradeUnion,
 )
 from .base import MarketSnapshot, PricingEngine, PricingResult
 from .cap_floor_pricer import CapFloorPricer
@@ -13,7 +13,7 @@ from .commodity_option_pricer import CommodityFuturesOptionPricer
 from .commodity_swap_pricer import CommoditySwapPricer
 from .fx_forward_pricer import FXForwardPricer
 from .fx_option_pricer import FXOptionPricer
-from .irs_pricer import IRSPricer
+from .irs_pricer import AmortizingIRSPricer, FloatFloatSwapPricer, IRSPricer
 from .swaption_pricer import SwaptionPricer
 
 
@@ -26,6 +26,8 @@ class PricingDispatcher:
     def __init__(self) -> None:
         self._engines: Dict[Type, PricingEngine] = {
             IRS: IRSPricer(),
+            AmortizingIRS: AmortizingIRSPricer(),
+            FloatFloatSwap: FloatFloatSwapPricer(),
             CapFloor: CapFloorPricer(),
             Swaption: SwaptionPricer(),
             FXForward: FXForwardPricer(),

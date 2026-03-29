@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from ..common.enums import OptionType, PayReceive
 
@@ -28,6 +28,70 @@ class IRS:
     pay_receive: PayReceive             # PAY fixed or RECEIVE fixed
     discount_curve_id: str
     forward_curve_id: str
+    netting_set_id: Optional[str] = None
+
+
+@dataclass
+class AmortizingIRS:
+    """
+    Fixed-for-floating interest rate swap with a step-down (or step-up) notional.
+
+    ``notional_schedule`` is a list of ``(payment_date, notional)`` pairs that maps
+    each payment date in the generated schedule to the outstanding notional for that
+    accrual period.  Any payment date not present in the schedule falls back to
+    ``initial_notional``.
+    """
+    trade_id: str
+    currency: str
+    initial_notional: float
+    notional_schedule: List[Tuple[date, float]]   # (payment_date, notional)
+    effective_date: date
+    maturity_date: date
+    fixed_rate: float
+    fixed_day_count: str
+    float_index: str
+    float_day_count: str
+    payment_frequency: str
+    pay_receive: PayReceive
+    discount_curve_id: str
+    forward_curve_id: str
+    netting_set_id: Optional[str] = None
+
+    def notional_at(self, payment_date: date) -> float:
+        """Return the notional for the period ending on ``payment_date``."""
+        lookup: Dict[date, float] = dict(self.notional_schedule)
+        return lookup.get(payment_date, self.initial_notional)
+
+
+@dataclass
+class FloatFloatSwap:
+    """
+    Floating-for-floating (basis) swap: two floating legs referencing different
+    indices (e.g. SOFR 3M vs EURIBOR 6M, or SOFR vs Fed Funds OIS).
+
+    ``pay_receive`` applies to Leg 1: PAY means pay Leg 1 and receive Leg 2.
+    Each leg may carry an additive spread (default 0).
+    """
+    trade_id: str
+    currency: str
+    notional: float
+    effective_date: date
+    maturity_date: date
+    # Leg 1
+    leg1_index: str
+    leg1_day_count: str
+    leg1_frequency: str
+    leg1_forward_curve_id: str
+    leg1_spread: float = 0.0            # additive spread on top of the floating rate
+    # Leg 2
+    leg2_index: str = ""
+    leg2_day_count: str = "ACT360"
+    leg2_frequency: str = "QUARTERLY"
+    leg2_forward_curve_id: str = ""
+    leg2_spread: float = 0.0
+    # Common
+    pay_receive: PayReceive = PayReceive.PAY
+    discount_curve_id: str = ""
     netting_set_id: Optional[str] = None
 
 
@@ -148,7 +212,8 @@ class CommodityFuturesOption:
 # ---------------------------------------------------------------------------
 
 TradeUnion = Union[
-    IRS, CapFloor, Swaption,
+    IRS, AmortizingIRS, FloatFloatSwap,
+    CapFloor, Swaption,
     FXForward, FXOption,
     CommoditySwap, CommodityFuturesOption,
 ]

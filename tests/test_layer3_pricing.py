@@ -10,12 +10,14 @@ from market_risk_engine.layer1_market_data.models import (
     CommodityCurve, FXRate, VolSurface, YieldCurve,
 )
 from market_risk_engine.layer2_portfolio.models import (
-    CapFloor, CommodityFuturesOption, CommoditySwap,
-    FXForward, FXOption, IRS, Swaption,
+    AmortizingIRS, CapFloor, CommodityFuturesOption, CommoditySwap,
+    FloatFloatSwap, FXForward, FXOption, IRS, Swaption,
 )
 from market_risk_engine.layer3_pricing.base import MarketSnapshot
 from market_risk_engine.layer3_pricing.dispatcher import PricingDispatcher
-from market_risk_engine.layer3_pricing.irs_pricer import IRSPricer
+from market_risk_engine.layer3_pricing.irs_pricer import (
+    AmortizingIRSPricer, FloatFloatSwapPricer, IRSPricer,
+)
 from market_risk_engine.layer3_pricing.fx_option_pricer import _garman_kohlhagen
 from market_risk_engine.layer3_pricing.commodity_option_pricer import _black76
 
@@ -167,6 +169,132 @@ def test_black76_put_call_parity():
     call = _black76(F, K, sigma, T, df, 1.0, OptionType.CALL)
     put = _black76(F, K, sigma, T, df, 1.0, OptionType.PUT)
     assert abs((call - put) - df * (F - K)) < 1e-9
+
+
+# ---------------------------------------------------------------------------
+# Dispatcher
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Amortizing IRS
+# ---------------------------------------------------------------------------
+
+def test_amortizing_irs_lower_npv_than_bullet():
+    """An amortizing IRS on the same terms should have smaller DV01 than a bullet."""
+    maturity = date(2027, 1, 15)
+    # Bullet IRS
+    bullet = IRS(
+        trade_id="BULLET",
+        currency="USD", notional=10_000_000,
+        effective_date=TODAY, maturity_date=maturity,
+        fixed_rate=0.05, fixed_day_count="30360",
+        float_index="SOFR", float_day_count="ACT360",
+        payment_frequency="SEMIANNUAL", pay_receive=PayReceive.PAY,
+        discount_curve_id="USD_SOFR", forward_curve_id="USD_SOFR",
+    )
+    # Amortizing IRS: notional drops by 2.5M every year
+    sched = [
+        (date(2025, 1, 15), 7_500_000),
+        (date(2026, 1, 15), 5_000_000),
+        (date(2027, 1, 15), 2_500_000),
+    ]
+    amort = AmortizingIRS(
+        trade_id="AMORT",
+        currency="USD", initial_notional=10_000_000,
+        notional_schedule=sched,
+        effective_date=TODAY, maturity_date=maturity,
+        fixed_rate=0.05, fixed_day_count="30360",
+        float_index="SOFR", float_day_count="ACT360",
+        payment_frequency="SEMIANNUAL", pay_receive=PayReceive.PAY,
+        discount_curve_id="USD_SOFR", forward_curve_id="USD_SOFR",
+    )
+    pricer = AmortizingIRSPricer()
+    bullet_pricer = IRSPricer()
+    r_amort = pricer.price(amort, MARKET)
+    r_bullet = bullet_pricer.price(bullet, MARKET)
+    assert r_amort.error is None
+    assert r_amort.pv01 is not None
+    assert r_bullet.pv01 is not None
+    # Amortizing DV01 must be smaller in magnitude than bullet
+    assert abs(r_amort.pv01) < abs(r_bullet.pv01)
+
+
+def test_amortizing_irs_pay_receive_symmetry():
+    """Pay and receive amortizing IRS should sum to zero NPV."""
+    sched = [(date(2025, 7, 15), 5_000_000), (date(2026, 1, 15), 0.0)]
+    common = dict(
+        currency="USD", initial_notional=10_000_000,
+        notional_schedule=sched,
+        effective_date=TODAY, maturity_date=date(2026, 1, 15),
+        fixed_rate=0.05, fixed_day_count="30360",
+        float_index="SOFR", float_day_count="ACT360",
+        payment_frequency="SEMIANNUAL",
+        discount_curve_id="USD_SOFR", forward_curve_id="USD_SOFR",
+    )
+    pay = AmortizingIRS(trade_id="PAY", pay_receive=PayReceive.PAY, **common)
+    recv = AmortizingIRS(trade_id="RCV", pay_receive=PayReceive.RECEIVE, **common)
+    pricer = AmortizingIRSPricer()
+    assert abs(pricer.price(pay, MARKET).npv + pricer.price(recv, MARKET).npv) < 1.0
+
+
+# ---------------------------------------------------------------------------
+# Float-Float (basis) swap
+# ---------------------------------------------------------------------------
+
+def test_float_float_identical_legs_zero_npv():
+    """When both legs reference the same curve with zero spread, NPV must be zero."""
+    trade = FloatFloatSwap(
+        trade_id="BASIS_FLAT",
+        currency="USD", notional=10_000_000,
+        effective_date=TODAY, maturity_date=date(2027, 1, 15),
+        leg1_index="SOFR", leg1_day_count="ACT360", leg1_frequency="QUARTERLY",
+        leg1_forward_curve_id="USD_SOFR", leg1_spread=0.0,
+        leg2_index="SOFR", leg2_day_count="ACT360", leg2_frequency="QUARTERLY",
+        leg2_forward_curve_id="USD_SOFR", leg2_spread=0.0,
+        pay_receive=PayReceive.PAY,
+        discount_curve_id="USD_SOFR",
+    )
+    pricer = FloatFloatSwapPricer()
+    result = pricer.price(trade, MARKET)
+    assert result.error is None
+    assert abs(result.npv) < 1.0, f"Identical-leg basis swap NPV should be 0, got {result.npv}"
+
+
+def test_float_float_spread_increases_npv():
+    """Adding a positive spread to leg 2 should increase NPV when paying leg 1."""
+    common = dict(
+        currency="USD", notional=10_000_000,
+        effective_date=TODAY, maturity_date=date(2027, 1, 15),
+        leg1_index="SOFR", leg1_day_count="ACT360", leg1_frequency="QUARTERLY",
+        leg1_forward_curve_id="USD_SOFR", leg1_spread=0.0,
+        leg2_index="USD_SOFR", leg2_day_count="ACT360", leg2_frequency="QUARTERLY",
+        leg2_forward_curve_id="USD_SOFR",
+        pay_receive=PayReceive.PAY,
+        discount_curve_id="USD_SOFR",
+    )
+    pricer = FloatFloatSwapPricer()
+    base = FloatFloatSwap(trade_id="BASE", leg2_spread=0.0, **common)
+    with_spread = FloatFloatSwap(trade_id="SPREAD", leg2_spread=0.0025, **common)  # +25bp on leg 2
+    npv_base = pricer.price(base, MARKET).npv
+    npv_spread = pricer.price(with_spread, MARKET).npv
+    assert npv_spread > npv_base  # extra spread on received leg improves NPV
+
+
+def test_float_float_pay_receive_symmetry():
+    """Pay and receive sides should sum to zero."""
+    common = dict(
+        currency="USD", notional=5_000_000,
+        effective_date=TODAY, maturity_date=date(2026, 1, 15),
+        leg1_index="SOFR", leg1_day_count="ACT360", leg1_frequency="QUARTERLY",
+        leg1_forward_curve_id="USD_SOFR", leg1_spread=0.001,
+        leg2_index="USD_SOFR", leg2_day_count="ACT360", leg2_frequency="SEMIANNUAL",
+        leg2_forward_curve_id="USD_SOFR", leg2_spread=0.0,
+        discount_curve_id="USD_SOFR",
+    )
+    pricer = FloatFloatSwapPricer()
+    pay = FloatFloatSwap(trade_id="PAY", pay_receive=PayReceive.PAY, **common)
+    recv = FloatFloatSwap(trade_id="RCV", pay_receive=PayReceive.RECEIVE, **common)
+    assert abs(pricer.price(pay, MARKET).npv + pricer.price(recv, MARKET).npv) < 1.0
 
 
 # ---------------------------------------------------------------------------
