@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m pytest tests/ -v)"
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(dir \"C:\\\\Users\\\\jrs4v\\\\Desktop\\\\Python Projects\\\\Market-Risk-Engine\")"
     ]
   }
 }

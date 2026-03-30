@@ -225,13 +225,42 @@ class CommodityFuturesOption:
     business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
+@dataclass
+class BermudanSwaption:
+    """
+    Bermudan swaption: option to enter a swap on any of a set of exercise dates.
+
+    The pricer calibrates a Hull-White 1-factor model to the basket of
+    coterminal European swaptions (each sharing ``underlying_maturity``) using
+    the Bachelier (normal) implied vols from ``vol_surface_id``, then prices
+    via a trinomial tree with backward induction.
+    """
+    trade_id: str
+    currency: str
+    notional: float
+    exercise_dates: List[date]          # sorted list; at least one date
+    underlying_start: date              # start of the underlying swap
+    underlying_maturity: date           # final maturity of the underlying swap
+    strike: float                       # fixed rate of the underlying swap
+    option_type: OptionType             # PAYER or RECEIVER
+    vol_surface_id: str                 # Bachelier (normal) vol surface id
+    discount_curve_id: str
+    forward_curve_id: str
+    payment_frequency: str = "SEMIANNUAL"
+    day_count: str = "ACT365"
+    n_tree_steps: int = 100             # number of trinomial-tree time steps
+    netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
+
+
 # ---------------------------------------------------------------------------
 # Union type for dispatcher routing
 # ---------------------------------------------------------------------------
 
 TradeUnion = Union[
     IRS, AmortizingIRS, FloatFloatSwap,
-    CapFloor, Swaption,
+    CapFloor, Swaption, BermudanSwaption,
     FXForward, FXOption,
     CommoditySwap, CommodityFuturesOption,
 ]

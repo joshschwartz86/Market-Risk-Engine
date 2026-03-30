@@ -10,8 +10,8 @@ from lxml import etree
 from ..common.enums import BusinessDayConvention, OptionType, PayReceive
 from ..common.exceptions import PortfolioParseError
 from .models import (
-    AmortizingIRS, CapFloor, CommodityFuturesOption, CommoditySwap,
-    FloatFloatSwap, FXForward, FXOption, IRS, Portfolio, Swaption,
+    AmortizingIRS, BermudanSwaption, CapFloor, CommodityFuturesOption,
+    CommoditySwap, FloatFloatSwap, FXForward, FXOption, IRS, Portfolio, Swaption,
 )
 
 
@@ -256,12 +256,55 @@ def _parse_float_float_swap(el: etree._Element, trade_id: str,
     )
 
 
+def _parse_bermudan_swaption(el: etree._Element, trade_id: str,
+                              ns_id: Optional[str]) -> BermudanSwaption:
+    """
+    XML structure for exercise dates::
+
+        <ExerciseDates>
+            <Date>2025-01-15</Date>
+            <Date>2025-07-15</Date>
+            ...
+        </ExerciseDates>
+    """
+    ex_el = el.find("ExerciseDates")
+    exercise_dates = []
+    if ex_el is not None:
+        for d_el in ex_el.findall("Date"):
+            if d_el.text:
+                exercise_dates.append(date.fromisoformat(d_el.text.strip()))
+
+    n_steps_text = el.findtext("NTreeSteps", "100")
+    n_steps = int(n_steps_text.strip()) if n_steps_text else 100
+
+    return BermudanSwaption(
+        trade_id=trade_id,
+        currency=_str(el, "Currency"),
+        notional=_float(el, "Notional"),
+        exercise_dates=sorted(exercise_dates),
+        underlying_start=_date(el, "UnderlyingStart"),
+        underlying_maturity=_date(el, "UnderlyingMaturity"),
+        strike=_float(el, "Strike"),
+        option_type=OptionType(_str(el, "OptionType")),
+        vol_surface_id=_str(el, "VolSurfaceId"),
+        discount_curve_id=_str(el, "DiscountCurveId"),
+        forward_curve_id=_str(el, "ForwardCurveId"),
+        payment_frequency=el.findtext("PaymentFrequency", "SEMIANNUAL").strip(),
+        day_count=el.findtext("DayCount", "ACT365").strip(),
+        n_tree_steps=n_steps,
+        netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
+    )
+
+
 _PARSERS = {
     "IRS": _parse_irs,
     "AmortizingIRS": _parse_amortizing_irs,
     "FloatFloatSwap": _parse_float_float_swap,
     "CapFloor": _parse_capfloor,
     "Swaption": _parse_swaption,
+    "BermudanSwaption": _parse_bermudan_swaption,
     "FXForward": _parse_fxforward,
     "FXOption": _parse_fxoption,
     "CommoditySwap": _parse_commodity_swap,

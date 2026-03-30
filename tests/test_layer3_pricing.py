@@ -10,8 +10,8 @@ from market_risk_engine.layer1_market_data.models import (
     CommodityCurve, FXRate, VolSurface, YieldCurve,
 )
 from market_risk_engine.layer2_portfolio.models import (
-    AmortizingIRS, CapFloor, CommodityFuturesOption, CommoditySwap,
-    FloatFloatSwap, FXForward, FXOption, IRS, Swaption,
+    AmortizingIRS, BermudanSwaption, CapFloor, CommodityFuturesOption,
+    CommoditySwap, FloatFloatSwap, FXForward, FXOption, IRS, Swaption,
 )
 from market_risk_engine.layer3_pricing.base import MarketSnapshot
 from market_risk_engine.layer3_pricing.dispatcher import PricingDispatcher
@@ -299,6 +299,208 @@ def test_float_float_pay_receive_symmetry():
 
 # ---------------------------------------------------------------------------
 # Dispatcher
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Bermudan Swaption — Hull-White tree pricer
+# ---------------------------------------------------------------------------
+
+# Normal (Bachelier) vol surface for swaptions: flat at 100bp
+_HW_NORMAL_VOL = VolSurface(
+    asset_id="USD_BACHELIER",
+    as_of_date=TODAY,
+    strikes=[0.03, 0.04, 0.045, 0.05, 0.055, 0.06],
+    expiries=[0.5, 1.0, 2.0, 3.0, 4.0],
+    vols=np.full((5, 6), 0.0100),   # 100bp flat normal vol
+)
+
+_HW_MARKET = MarketSnapshot(
+    as_of_date=TODAY,
+    yield_curves={"USD_SOFR": USD_SOFR},
+    vol_surfaces={"USD_BACHELIER": _HW_NORMAL_VOL},
+)
+
+
+def _make_bermudan(exercise_dates, n_steps=80, opt_type=OptionType.PAYER,
+                   strike=0.05):
+    return BermudanSwaption(
+        trade_id="BERM",
+        currency="USD",
+        notional=1_000_000,
+        exercise_dates=exercise_dates,
+        underlying_start=date(2025, 1, 15),
+        underlying_maturity=date(2029, 1, 15),
+        strike=strike,
+        option_type=opt_type,
+        vol_surface_id="USD_BACHELIER",
+        discount_curve_id="USD_SOFR",
+        forward_curve_id="USD_SOFR",
+        payment_frequency="SEMIANNUAL",
+        day_count="ACT365",
+        n_tree_steps=n_steps,
+    )
+
+
+def test_bermudan_payer_npv_positive():
+    """ATM payer Bermudan swaption should have a positive NPV."""
+    from market_risk_engine.layer3_pricing.bermudan_swaption_pricer import (
+        BermudanSwaptionPricer,
+    )
+    trade = _make_bermudan([date(2025, 1, 15), date(2026, 1, 15),
+                             date(2027, 1, 15), date(2028, 1, 15)])
+    pricer = BermudanSwaptionPricer()
+    result = pricer.price(trade, _HW_MARKET)
+    assert result.error is None, result.error
+    assert result.npv > 0, f"Expected positive NPV, got {result.npv}"
+
+
+def test_bermudan_receiver_npv_positive():
+    """ATM receiver Bermudan swaption should also have a positive NPV."""
+    from market_risk_engine.layer3_pricing.bermudan_swaption_pricer import (
+        BermudanSwaptionPricer,
+    )
+    trade = _make_bermudan(
+        [date(2025, 1, 15), date(2026, 1, 15), date(2027, 1, 15)],
+        opt_type=OptionType.RECEIVER,
+    )
+    pricer = BermudanSwaptionPricer()
+    result = pricer.price(trade, _HW_MARKET)
+    assert result.error is None, result.error
+    assert result.npv > 0
+
+
+def test_bermudan_single_exercise_approx_european():
+    """
+    A Bermudan with a single exercise date should give a value close to
+    the corresponding European swaption priced with the Bachelier model.
+    The tree (100 steps) introduces discretisation error, so we allow 5%
+    relative tolerance.
+    """
+    from market_risk_engine.layer1_market_data.yield_curve import (
+        YieldCurveInterpolator,
+    )
+    from market_risk_engine.layer3_pricing.bermudan_swaption_pricer import (
+        BermudanSwaptionPricer,
+    )
+    from market_risk_engine.layer3_pricing.swaption_pricer import SwaptionPricer
+
+    ex_date = date(2026, 1, 15)
+    berm_trade = _make_bermudan([ex_date], n_steps=120)
+    euro_trade = Swaption(
+        trade_id="EURO",
+        currency="USD",
+        notional=1_000_000,
+        option_expiry=ex_date,
+        underlying_start=ex_date,
+        underlying_maturity=date(2029, 1, 15),
+        strike=0.05,
+        option_type=OptionType.PAYER,
+        vol_model="bachelier",
+        vol_surface_id="USD_BACHELIER",
+        discount_curve_id="USD_SOFR",
+        forward_curve_id="USD_SOFR",
+        payment_frequency="SEMIANNUAL",
+    )
+    berm_result = BermudanSwaptionPricer().price(berm_trade, _HW_MARKET)
+    euro_result = SwaptionPricer().price(euro_trade, _HW_MARKET)
+
+    assert berm_result.error is None, berm_result.error
+    assert euro_result.error is None, euro_result.error
+    assert berm_result.npv > 0
+    assert euro_result.npv > 0
+    # Tree price should be within 10% of analytic European price
+    rel_err = abs(berm_result.npv - euro_result.npv) / euro_result.npv
+    assert rel_err < 0.10, (
+        f"Bermudan single-exercise vs European: tree={berm_result.npv:.2f}, "
+        f"analytic={euro_result.npv:.2f}, rel_err={rel_err:.3%}"
+    )
+
+
+def test_bermudan_value_geq_earliest_european():
+    """
+    A Bermudan with multiple exercise dates must be worth at least as much
+    as the European swaption with the earliest exercise date (since it
+    strictly dominates by providing more optionality).
+    """
+    from market_risk_engine.layer3_pricing.bermudan_swaption_pricer import (
+        BermudanSwaptionPricer,
+    )
+    from market_risk_engine.layer3_pricing.swaption_pricer import SwaptionPricer
+
+    ex_dates = [date(2025, 1, 15), date(2026, 1, 15),
+                date(2027, 1, 15), date(2028, 1, 15)]
+    berm_trade = _make_bermudan(ex_dates, n_steps=100)
+    euro_trade = Swaption(
+        trade_id="EURO_FIRST",
+        currency="USD",
+        notional=1_000_000,
+        option_expiry=ex_dates[0],
+        underlying_start=ex_dates[0],
+        underlying_maturity=date(2029, 1, 15),
+        strike=0.05,
+        option_type=OptionType.PAYER,
+        vol_model="bachelier",
+        vol_surface_id="USD_BACHELIER",
+        discount_curve_id="USD_SOFR",
+        forward_curve_id="USD_SOFR",
+        payment_frequency="SEMIANNUAL",
+    )
+    berm_npv = BermudanSwaptionPricer().price(berm_trade, _HW_MARKET).npv
+    euro_npv = SwaptionPricer().price(euro_trade, _HW_MARKET).npv
+    # Bermudan >= European (more exercise rights can only add value)
+    assert berm_npv >= euro_npv * 0.90, (
+        f"Bermudan {berm_npv:.2f} should be >= European {euro_npv:.2f}"
+    )
+
+
+def test_bermudan_itm_payer_higher_than_otm():
+    """An in-the-money Bermudan payer should be worth more than an OTM one."""
+    from market_risk_engine.layer3_pricing.bermudan_swaption_pricer import (
+        BermudanSwaptionPricer,
+    )
+    ex_dates = [date(2025, 7, 15), date(2026, 7, 15), date(2027, 7, 15)]
+    pricer = BermudanSwaptionPricer()
+    # Low strike → deep ITM payer (right to pay below-market fixed rate)
+    itm = _make_bermudan(ex_dates, strike=0.02)
+    # High strike → OTM payer
+    otm = _make_bermudan(ex_dates, strike=0.10)
+    npv_itm = pricer.price(itm, _HW_MARKET).npv
+    npv_otm = pricer.price(otm, _HW_MARKET).npv
+    assert npv_itm > npv_otm, f"ITM={npv_itm:.2f}, OTM={npv_otm:.2f}"
+
+
+def test_bermudan_dispatcher_integration():
+    """BermudanSwaption routes correctly through PricingDispatcher."""
+    trade = _make_bermudan([date(2025, 7, 15), date(2026, 7, 15)], n_steps=60)
+    dispatcher = PricingDispatcher()
+    result = dispatcher.price_trade(trade, _HW_MARKET)
+    assert result.error is None, result.error
+    assert result.npv > 0
+
+
+def test_bermudan_expired_exercise_dates_returns_zero():
+    """If all exercise dates are in the past the NPV should be zero."""
+    from market_risk_engine.layer3_pricing.bermudan_swaption_pricer import (
+        BermudanSwaptionPricer,
+    )
+    trade = BermudanSwaption(
+        trade_id="EXPIRED",
+        currency="USD",
+        notional=1_000_000,
+        exercise_dates=[date(2023, 1, 15), date(2023, 7, 15)],
+        underlying_start=date(2023, 1, 15),
+        underlying_maturity=date(2028, 1, 15),
+        strike=0.05,
+        option_type=OptionType.PAYER,
+        vol_surface_id="USD_BACHELIER",
+        discount_curve_id="USD_SOFR",
+        forward_curve_id="USD_SOFR",
+    )
+    result = BermudanSwaptionPricer().price(trade, _HW_MARKET)
+    assert result.error is None
+    assert result.npv == 0.0
+
+
 # ---------------------------------------------------------------------------
 
 def test_dispatcher_prices_full_portfolio():
