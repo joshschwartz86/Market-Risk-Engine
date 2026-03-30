@@ -53,3 +53,9 @@ class FactorType(str, Enum):
     FX_SPOT = "fx_spot"
     COMMODITY = "commodity"
     VOL = "vol"
+
+
+class BusinessDayConvention(str, Enum):
+    FOLLOWING = "FOLLOWING"
+    MODIFIED_FOLLOWING = "MODIFIED_FOLLOWING"
+    PRECEDING = "PRECEDING"

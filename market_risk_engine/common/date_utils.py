@@ -1,5 +1,12 @@
+from __future__ import annotations
+
 from datetime import date
-from .enums import DayCount
+from typing import TYPE_CHECKING, Optional
+
+from .enums import BusinessDayConvention, DayCount
+
+if TYPE_CHECKING:
+    from .calendar import Calendar
 
 
 def year_fraction(start: date, end: date, day_count: str) -> float:
@@ -69,10 +76,20 @@ def frequency_to_period(frequency: str) -> float:
     return freq_map[key]
 
 
-def generate_schedule(effective: date, maturity: date, frequency: str) -> list[date]:
-    """Generate a list of payment dates from effective to maturity at the given frequency."""
-    from datetime import timedelta
-    import calendar
+def generate_schedule(
+    effective: date,
+    maturity: date,
+    frequency: str,
+    calendar: Optional[Calendar] = None,
+    convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING,
+) -> list[date]:
+    """
+    Generate a list of payment dates from effective to maturity at the given frequency.
+
+    If *calendar* is provided each raw date is adjusted to the nearest business day
+    using *convention* (default: MODIFIED_FOLLOWING).
+    """
+    import calendar as _cal
 
     period_months = {
         "MONTHLY": 1,
@@ -92,8 +109,12 @@ def generate_schedule(effective: date, maturity: date, frequency: str) -> list[d
             years_back += 1
         year = current.year - years_back
         month = m + 1
-        day = min(current.day, calendar.monthrange(year, month)[1])
+        day = min(current.day, _cal.monthrange(year, month)[1])
         current = date(year, month, day)
 
     dates.reverse()
+
+    if calendar is not None:
+        dates = [calendar.adjust(d, convention) for d in dates]
+
     return dates

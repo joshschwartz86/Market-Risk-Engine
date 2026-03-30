@@ -134,11 +134,11 @@ def test_irs_pay_vs_receive_symmetry():
 # ---------------------------------------------------------------------------
 
 def test_garman_kohlhagen_put_call_parity():
-    """C - P = S*exp(-rf*T) - K*exp(-rd*T)"""
+    """C - P = S*(1+rf)^(-T) - K*(1+rd)^(-T)"""
     S, K, rd, rf, sigma, T = 1.0875, 1.0875, 0.05, 0.038, 0.07, 0.5
     call = _garman_kohlhagen(S, K, rd, rf, sigma, T, OptionType.CALL)
     put = _garman_kohlhagen(S, K, rd, rf, sigma, T, OptionType.PUT)
-    parity = S * math.exp(-rf * T) - K * math.exp(-rd * T)
+    parity = S * (1.0 + rf) ** (-T) - K * (1.0 + rd) ** (-T)
     assert abs((call - put) - parity) < 1e-9
 
 

@@ -21,7 +21,7 @@ from market_risk_engine.layer1_market_data.vol_surface import (
 # ---------------------------------------------------------------------------
 
 def test_yield_curve_discount_factor_consistency():
-    """DF(t) must equal exp(-z*t) for a flat curve."""
+    """DF(t) must equal (1+z)^(-t) for a flat curve."""
     yc = YieldCurve(
         currency="USD", curve_name="TEST",
         as_of_date=date(2024, 1, 15),
@@ -31,7 +31,7 @@ def test_yield_curve_discount_factor_consistency():
     interp = YieldCurveInterpolator(yc)
     for t in [0.5, 1.0, 2.0, 5.0, 10.0]:
         df = interp.discount_factor(t)
-        expected = math.exp(-0.05 * t)
+        expected = (1.05) ** (-t)
         assert abs(df - expected) < 1e-8, f"DF mismatch at t={t}"
 
 
@@ -45,9 +45,9 @@ def test_yield_curve_forward_rate():
     )
     interp = YieldCurveInterpolator(yc)
     fwd = interp.forward_rate(1.0, 2.0)
-    # forward_rate returns simply-compounded; for flat 5% continuous curve
-    # simply-compounded fwd = (exp(0.05) - 1) ≈ 0.05127
-    assert abs(fwd - (math.exp(0.05) - 1.0)) < 1e-4
+    # forward_rate returns simply-compounded; for flat 5% annual curve
+    # the simply-compounded forward rate equals exactly 0.05
+    assert abs(fwd - 0.05) < 1e-8
 
 
 def test_yield_curve_sorted_tenors():

@@ -55,7 +55,7 @@ class YieldCurveBuilder:
         for inst in instruments:
             t = inst.maturity
             if inst.instrument_type == "deposit":
-                z = inst.rate  # treated as already a continuously-compounded rate
+                z = inst.rate  # treated as an annually-compounded zero rate
                 tenors.append(t)
                 zero_rates.append(z)
             elif inst.instrument_type in ("fra", "future"):
@@ -106,7 +106,7 @@ class YieldCurveBuilder:
             if not ts:
                 return 1.0
             z = float(np.interp(t, ts, zs))
-            return math.exp(-z * t)
+            return (1.0 + z) ** (-t)
 
         def npv(z_guess: float) -> float:
             pv_fixed = 0.0
@@ -144,7 +144,7 @@ class YieldCurveInterpolator:
             self._mode = "spline"
         elif curve.interpolation == "log_linear":
             # interpolate in log-discount-factor space
-            self._log_dfs = -z * t
+            self._log_dfs = -t * np.log1p(z)
             self._t = t
             self._mode = "log_linear"
         else:
@@ -159,14 +159,14 @@ class YieldCurveInterpolator:
             return float(self._spline(t))
         if self._mode == "log_linear":
             log_df = float(np.interp(t, self._t, self._log_dfs))
-            return -log_df / t
+            return math.expm1(-log_df / t)
         return float(np.interp(t, self._t, self._z))
 
     def discount_factor(self, t: float) -> float:
         if t <= 0:
             return 1.0
         z = self.zero_rate(t)
-        return math.exp(-z * t)
+        return (1.0 + z) ** (-t)
 
     def forward_rate(self, t1: float, t2: float) -> float:
         """Simply-compounded forward rate between t1 and t2."""

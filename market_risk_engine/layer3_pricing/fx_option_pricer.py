@@ -20,8 +20,8 @@ def _garman_kohlhagen(S: float, K: float, r_d: float, r_f: float,
     Garman-Kohlhagen FX option value per unit of notional.
     S     = spot rate (quote per base)
     K     = strike
-    r_d   = continuously-compounded domestic (quote) risk-free rate
-    r_f   = continuously-compounded foreign (base) risk-free rate
+    r_d   = annually-compounded domestic (quote) risk-free rate
+    r_f   = annually-compounded foreign (base) risk-free rate
     sigma = lognormal vol
     T     = time to expiry in years
     """
@@ -30,15 +30,15 @@ def _garman_kohlhagen(S: float, K: float, r_d: float, r_f: float,
         return intrinsic
 
     sqrt_T = math.sqrt(T)
-    d1 = (math.log(S / K) + (r_d - r_f + 0.5 * sigma ** 2) * T) / (sigma * sqrt_T)
+    d1 = (math.log(S / K) + (math.log1p(r_d) - math.log1p(r_f) + 0.5 * sigma ** 2) * T) / (sigma * sqrt_T)
     d2 = d1 - sigma * sqrt_T
 
     if opt_type == OptionType.CALL:
-        return (S * math.exp(-r_f * T) * st.norm.cdf(d1)
-                - K * math.exp(-r_d * T) * st.norm.cdf(d2))
+        return (S * (1.0 + r_f) ** (-T) * st.norm.cdf(d1)
+                - K * (1.0 + r_d) ** (-T) * st.norm.cdf(d2))
     else:  # PUT
-        return (K * math.exp(-r_d * T) * st.norm.cdf(-d2)
-                - S * math.exp(-r_f * T) * st.norm.cdf(-d1))
+        return (K * (1.0 + r_d) ** (-T) * st.norm.cdf(-d2)
+                - S * (1.0 + r_f) ** (-T) * st.norm.cdf(-d1))
 
 
 class FXOptionPricer(PricingEngine):
@@ -79,11 +79,11 @@ class FXOptionPricer(PricingEngine):
 
         # Delta (spot delta in quote currency)
         sqrt_T = math.sqrt(max(T, 1e-9))
-        d1 = (math.log(S / trade.strike) + (r_d - r_f + 0.5 * sigma ** 2) * T) / (sigma * sqrt_T)
+        d1 = (math.log(S / trade.strike) + (math.log1p(r_d) - math.log1p(r_f) + 0.5 * sigma ** 2) * T) / (sigma * sqrt_T)
         if trade.option_type == OptionType.CALL:
-            delta = math.exp(-r_f * T) * st.norm.cdf(d1) * trade.notional_base
+            delta = (1.0 + r_f) ** (-T) * st.norm.cdf(d1) * trade.notional_base
         else:
-            delta = -math.exp(-r_f * T) * st.norm.cdf(-d1) * trade.notional_base
+            delta = -(1.0 + r_f) ** (-T) * st.norm.cdf(-d1) * trade.notional_base
 
         # Vega
         unit_bumped = _garman_kohlhagen(S, trade.strike, r_d, r_f, sigma + 0.01, T,
