@@ -1,0 +1,11 @@
+{
+  "USD_SOFR": {
+    "description": "USD SOFR overnight index swap zero curve",
+    "currency": "USD",
+    "day_count": "ACT360",
+    "rate_type": "zero",
+    "rate_basis": "percent",
+    "interpolation": "cubic_spline",
+    "file_prefix": "sofr_curve"
+  }
+}

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Dict, Optional
 
+from ..common.calendar import Calendar
 from ..layer1_market_data.models import (
     CommodityCurve, FXRate, VolSurface, YieldCurve,
 )
@@ -23,6 +24,7 @@ class MarketSnapshot:
     vol_surfaces: Dict[str, VolSurface] = field(default_factory=dict)
     fx_rates: Dict[str, FXRate] = field(default_factory=dict)
     commodity_curves: Dict[str, CommodityCurve] = field(default_factory=dict)
+    calendars: Dict[str, Calendar] = field(default_factory=dict)
 
 
 @dataclass

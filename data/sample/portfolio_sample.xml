@@ -37,6 +37,8 @@
     <PayReceive>PAY</PayReceive>
     <DiscountCurveId>USD_SOFR</DiscountCurveId>
     <ForwardCurveId>USD_SOFR</ForwardCurveId>
+    <CalendarName>USD</CalendarName>
+    <BusinessDayConvention>MODIFIED_FOLLOWING</BusinessDayConvention>
   </Trade>
 
   <!-- Receive fixed 10y EUR IRS -->
@@ -53,6 +55,8 @@
     <PayReceive>RECEIVE</PayReceive>
     <DiscountCurveId>EUR_ESTR</DiscountCurveId>
     <ForwardCurveId>EUR_ESTR</ForwardCurveId>
+    <CalendarName>EUR</CalendarName>
+    <BusinessDayConvention>MODIFIED_FOLLOWING</BusinessDayConvention>
   </Trade>
 
   <!-- =============================================================== -->
@@ -73,6 +77,8 @@
     <DiscountCurveId>USD_SOFR</DiscountCurveId>
     <ForwardCurveId>USD_SOFR</ForwardCurveId>
     <PaymentFrequency>SEMIANNUAL</PaymentFrequency>
+    <CalendarName>USD</CalendarName>
+    <BusinessDayConvention>FOLLOWING</BusinessDayConvention>
   </Trade>
 
   <!-- =============================================================== -->
@@ -129,6 +135,8 @@
     <BaseDiscountCurveId>EUR_ESTR</BaseDiscountCurveId>
     <QuoteDiscountCurveId>USD_SOFR</QuoteDiscountCurveId>
     <FxRateId>EURUSD</FxRateId>
+    <CalendarName>USD</CalendarName>
+    <BusinessDayConvention>FOLLOWING</BusinessDayConvention>
   </Trade>
 
   <!-- =============================================================== -->

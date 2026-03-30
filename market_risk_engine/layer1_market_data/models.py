@@ -9,13 +9,13 @@ import numpy as np
 
 @dataclass
 class YieldCurve:
-    """Continuously-compounded zero-rate curve for a single currency / index."""
+    """Annually-compounded zero-rate curve for a single currency / index."""
 
     currency: str
     curve_name: str
     as_of_date: date
     tenors: List[float]       # year fractions
-    zero_rates: List[float]   # continuously-compounded rates
+    zero_rates: List[float]   # annually-compounded zero rates (decimal, e.g. 0.05 = 5%)
     day_count: str = "ACT360"
     interpolation: str = "cubic_spline"
 

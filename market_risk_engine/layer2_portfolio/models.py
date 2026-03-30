@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Dict, List, Optional, Tuple, Union
 
-from ..common.enums import OptionType, PayReceive
+from ..common.enums import BusinessDayConvention, OptionType, PayReceive
 
 
 # ---------------------------------------------------------------------------
@@ -29,6 +29,8 @@ class IRS:
     discount_curve_id: str
     forward_curve_id: str
     netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
 @dataclass
@@ -56,6 +58,8 @@ class AmortizingIRS:
     discount_curve_id: str
     forward_curve_id: str
     netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
     def notional_at(self, payment_date: date) -> float:
         """Return the notional for the period ending on ``payment_date``."""
@@ -93,6 +97,8 @@ class FloatFloatSwap:
     pay_receive: PayReceive = PayReceive.PAY
     discount_curve_id: str = ""
     netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
 @dataclass
@@ -112,6 +118,8 @@ class CapFloor:
     discount_curve_id: str
     forward_curve_id: str
     netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
 @dataclass
@@ -131,6 +139,8 @@ class Swaption:
     forward_curve_id: str
     payment_frequency: str = "SEMIANNUAL"
     netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +161,8 @@ class FXForward:
     quote_discount_curve_id: str
     fx_rate_id: str                     # e.g. "EURUSD"
     netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
 @dataclass
@@ -169,6 +181,8 @@ class FXOption:
     quote_discount_curve_id: str
     fx_rate_id: str
     netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +203,8 @@ class CommoditySwap:
     commodity_curve_id: str
     discount_curve_id: str
     netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
 @dataclass
@@ -205,6 +221,8 @@ class CommodityFuturesOption:
     discount_curve_id: str
     commodity_curve_id: str
     netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
 # ---------------------------------------------------------------------------

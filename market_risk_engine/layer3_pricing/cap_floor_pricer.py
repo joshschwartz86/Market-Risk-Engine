@@ -66,8 +66,11 @@ class CapFloorPricer(PricingEngine):
         vol_interp = VolSurfaceInterpolator(market.vol_surfaces[trade.vol_surface_id])
         today = market.as_of_date
 
+        cal = market.calendars.get(trade.calendar_name) if trade.calendar_name else None
         schedule = generate_schedule(trade.effective_date, trade.maturity_date,
-                                     trade.payment_frequency)
+                                     trade.payment_frequency,
+                                     calendar=cal,
+                                     convention=trade.business_day_convention)
         prev = trade.effective_date
         total_pv = 0.0
         total_vega = 0.0

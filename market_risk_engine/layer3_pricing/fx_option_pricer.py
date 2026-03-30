@@ -66,7 +66,9 @@ class FXOptionPricer(PricingEngine):
         vol_interp = VolSurfaceInterpolator(market.vol_surfaces[trade.vol_surface_id])
         today = market.as_of_date
 
-        T = year_fraction(today, trade.expiry_date, "ACT365")
+        cal = market.calendars.get(trade.calendar_name) if trade.calendar_name else None
+        expiry = cal.adjust(trade.expiry_date, trade.business_day_convention) if cal else trade.expiry_date
+        T = year_fraction(today, expiry, "ACT365")
         r_f = base_disc.zero_rate(T) if T > 0 else 0.0
         r_d = quote_disc.zero_rate(T) if T > 0 else 0.0
 

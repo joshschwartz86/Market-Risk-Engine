@@ -1,10 +1,16 @@
 """Unit tests for Layer 1 — Market Data."""
+import json
 import math
+import tempfile
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 import pytest
 
+from market_risk_engine.layer1_market_data.loaders import (
+    load_curve_directory, load_curve_file,
+)
 from market_risk_engine.layer1_market_data.models import (
     CommodityCurve, FXRate, VolSurface, YieldCurve,
 )
@@ -14,6 +20,10 @@ from market_risk_engine.layer1_market_data.yield_curve import (
 from market_risk_engine.layer1_market_data.vol_surface import (
     SABRCalibrator, VolSurfaceInterpolator,
 )
+
+# Path to the real SOFR data shipped with the project
+_SOFR_DIR = Path(__file__).parents[1] / "data" / "SOFR data"
+_SOFR_FILE = _SOFR_DIR / "sofr_curve20260312.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -148,3 +158,94 @@ def test_commodity_curve_interpolation():
     )
     price = cc.price_at(0.75)
     assert 69.5 < price < 72.0
+
+
+# ---------------------------------------------------------------------------
+# Daily curve file loader  (Tenor / Rate / Date format)
+# ---------------------------------------------------------------------------
+
+_SOFR_META = {
+    "currency": "USD",
+    "day_count": "ACT360",
+    "rate_type": "zero",
+    "rate_basis": "percent",
+    "interpolation": "cubic_spline",
+}
+
+
+@pytest.mark.skipif(not _SOFR_FILE.exists(), reason="SOFR data file not present")
+def test_load_curve_file_returns_yield_curve():
+    yc = load_curve_file(str(_SOFR_FILE), "USD_SOFR", _SOFR_META)
+    assert isinstance(yc, YieldCurve)
+    assert yc.curve_name == "USD_SOFR"
+    assert yc.currency == "USD"
+    assert yc.as_of_date == date(2026, 3, 12)
+
+
+@pytest.mark.skipif(not _SOFR_FILE.exists(), reason="SOFR data file not present")
+def test_load_curve_file_rate_conversion():
+    """Rates in the CSV are in percent; stored value must be in decimal."""
+    yc = load_curve_file(str(_SOFR_FILE), "USD_SOFR", _SOFR_META)
+    # All rates must be well below 1.0 (they are ~3–4%)
+    assert all(0.0 < r < 0.20 for r in yc.zero_rates)
+    # The 1D rate is 3.772627% → 0.03772627
+    assert abs(yc.zero_rates[0] - 0.03772627) < 1e-6
+
+
+@pytest.mark.skipif(not _SOFR_FILE.exists(), reason="SOFR data file not present")
+def test_load_curve_file_tenor_count():
+    """All 26 tenor rows should be present (1D through 50Y)."""
+    yc = load_curve_file(str(_SOFR_FILE), "USD_SOFR", _SOFR_META)
+    assert len(yc.tenors) == 26
+
+
+@pytest.mark.skipif(not _SOFR_FILE.exists(), reason="SOFR data file not present")
+def test_load_curve_file_tenors_sorted():
+    yc = load_curve_file(str(_SOFR_FILE), "USD_SOFR", _SOFR_META)
+    assert yc.tenors == sorted(yc.tenors)
+
+
+@pytest.mark.skipif(not _SOFR_FILE.exists(), reason="SOFR data file not present")
+def test_load_curve_file_long_tenor_reasonable():
+    """50Y tenor should be just under 50 year-fractions (ACT360)."""
+    yc = load_curve_file(str(_SOFR_FILE), "USD_SOFR", _SOFR_META)
+    assert 49.0 < yc.tenors[-1] < 51.0
+
+
+@pytest.mark.skipif(not _SOFR_FILE.exists(), reason="SOFR data file not present")
+def test_load_curve_directory_uses_metadata():
+    yc_dict = load_curve_directory(str(_SOFR_DIR), date(2026, 3, 12))
+    assert "USD_SOFR" in yc_dict
+    yc = yc_dict["USD_SOFR"]
+    assert yc.currency == "USD"
+    assert yc.day_count == "ACT360"
+
+
+def test_load_curve_file_from_temp_csv():
+    """load_curve_file works on a hand-crafted minimal CSV."""
+    content = "Tenor,Rate,Date\n1M,5.0,1/15/2024\n1Y,4.8,1/15/2024\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp) / "test_curve20240115.csv"
+        p.write_text(content)
+        meta = {"currency": "USD", "day_count": "ACT360",
+                 "rate_type": "zero", "rate_basis": "percent"}
+        yc = load_curve_file(str(p), "TEST", meta)
+    assert yc.as_of_date == date(2024, 1, 15)
+    assert len(yc.tenors) == 2
+    assert abs(yc.zero_rates[0] - 0.05) < 1e-9   # 5.0% → 0.05
+    assert abs(yc.zero_rates[1] - 0.048) < 1e-9  # 4.8% → 0.048
+
+
+def test_load_curve_directory_missing_metadata_raises():
+    with tempfile.TemporaryDirectory() as tmp:
+        with pytest.raises(Exception, match="curve_metadata.json"):
+            load_curve_directory(tmp, date(2024, 1, 15))
+
+
+def test_load_curve_file_unknown_rate_basis_raises():
+    content = "Tenor,Rate,Date\n1Y,5.0,1/15/2024\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp) / "c.csv"
+        p.write_text(content)
+        with pytest.raises(Exception, match="rate_basis"):
+            load_curve_file(str(p), "X", {"currency": "USD", "rate_basis": "pct"})

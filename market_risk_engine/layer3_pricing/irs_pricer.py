@@ -38,8 +38,8 @@ class IRSPricer(PricingEngine):
         disc = YieldCurveInterpolator(market.yield_curves[trade.discount_curve_id])
         fwd = YieldCurveInterpolator(market.yield_curves[trade.forward_curve_id])
         today = market.as_of_date
-        fixed_pv = self._fixed_leg_pv(trade, disc, today)
-        float_pv = self._float_leg_pv(trade, disc, fwd, today)
+        fixed_pv = self._fixed_leg_pv(trade, disc, today, market)
+        float_pv = self._float_leg_pv(trade, disc, fwd, today, market)
         return fixed_pv, float_pv
 
     def _price(self, trade: IRS, market: MarketSnapshot) -> PricingResult:
@@ -61,9 +61,12 @@ class IRSPricer(PricingEngine):
         )
 
     def _fixed_leg_pv(self, trade: IRS, disc: YieldCurveInterpolator,
-                      today: date) -> float:
+                      today: date, market: MarketSnapshot = None) -> float:
+        cal = market.calendars.get(trade.calendar_name) if (market and trade.calendar_name) else None
         schedule = generate_schedule(trade.effective_date, trade.maturity_date,
-                                     trade.payment_frequency)
+                                     trade.payment_frequency,
+                                     calendar=cal,
+                                     convention=trade.business_day_convention)
         prev = trade.effective_date
         pv = 0.0
         for pay_date in schedule:
@@ -78,13 +81,17 @@ class IRSPricer(PricingEngine):
         return pv
 
     def _float_leg_pv(self, trade: IRS, disc: YieldCurveInterpolator,
-                      fwd: YieldCurveInterpolator, today: date) -> float:
+                      fwd: YieldCurveInterpolator, today: date,
+                      market: MarketSnapshot = None) -> float:
         """
         Float leg PV using the standard approximation:
             PV = Σ  fwd_rate(t_{i-1}, t_i) × τ_i × DF(t_i) × N
         """
+        cal = market.calendars.get(trade.calendar_name) if (market and trade.calendar_name) else None
         schedule = generate_schedule(trade.effective_date, trade.maturity_date,
-                                     trade.payment_frequency)
+                                     trade.payment_frequency,
+                                     calendar=cal,
+                                     convention=trade.business_day_convention)
         prev = trade.effective_date
         pv = 0.0
         for pay_date in schedule:
@@ -121,6 +128,7 @@ class IRSPricer(PricingEngine):
             vol_surfaces=market.vol_surfaces,
             fx_rates=market.fx_rates,
             commodity_curves=market.commodity_curves,
+            calendars=market.calendars,
         )
         fixed_pv, float_pv = self._price_legs(trade, bumped_market)
         bumped_npv = float_pv - fixed_pv if trade.pay_receive == PayReceive.PAY else fixed_pv - float_pv
@@ -141,6 +149,8 @@ def _float_leg_pv(
     today: date,
     notional_fn: Callable[[date], float],
     spread: float = 0.0,
+    calendar=None,
+    convention=None,
 ) -> float:
     """
     Generic floating-leg PV.
@@ -149,7 +159,10 @@ def _float_leg_pv(
     accrual period ending on that date — allows constant or amortizing schedules.
     ``spread`` is an additive rate spread applied to every period.
     """
-    schedule = generate_schedule(effective_date, maturity_date, frequency)
+    from ..common.enums import BusinessDayConvention as _BDC
+    _conv = convention if convention is not None else _BDC.MODIFIED_FOLLOWING
+    schedule = generate_schedule(effective_date, maturity_date, frequency,
+                                 calendar=calendar, convention=_conv)
     prev = effective_date
     pv = 0.0
     for pay_date in schedule:
@@ -176,9 +189,14 @@ def _fixed_leg_pv(
     today: date,
     fixed_rate: float,
     notional_fn: Callable[[date], float],
+    calendar=None,
+    convention=None,
 ) -> float:
     """Generic fixed-leg PV with support for amortizing notionals."""
-    schedule = generate_schedule(effective_date, maturity_date, frequency)
+    from ..common.enums import BusinessDayConvention as _BDC
+    _conv = convention if convention is not None else _BDC.MODIFIED_FOLLOWING
+    schedule = generate_schedule(effective_date, maturity_date, frequency,
+                                 calendar=calendar, convention=_conv)
     prev = effective_date
     pv = 0.0
     for pay_date in schedule:
@@ -223,15 +241,19 @@ class AmortizingIRSPricer(PricingEngine):
         disc = YieldCurveInterpolator(market.yield_curves[trade.discount_curve_id])
         fwd = YieldCurveInterpolator(market.yield_curves[trade.forward_curve_id])
         today = market.as_of_date
+        cal = market.calendars.get(trade.calendar_name) if trade.calendar_name else None
+        conv = trade.business_day_convention
         notional_fn = trade.notional_at
         fixed_pv = _fixed_leg_pv(
             disc, trade.effective_date, trade.maturity_date,
             trade.payment_frequency, trade.fixed_day_count, today,
             trade.fixed_rate, notional_fn,
+            calendar=cal, convention=conv,
         )
         float_pv = _float_leg_pv(
             disc, fwd, trade.effective_date, trade.maturity_date,
             trade.payment_frequency, trade.float_day_count, today, notional_fn,
+            calendar=cal, convention=conv,
         )
         return float_pv - fixed_pv if trade.pay_receive == PayReceive.PAY else fixed_pv - float_pv
 
@@ -257,7 +279,7 @@ class AmortizingIRSPricer(PricingEngine):
         bumped_market = MarketSnapshot(
             as_of_date=market.as_of_date, yield_curves=bumped_curves,
             vol_surfaces=market.vol_surfaces, fx_rates=market.fx_rates,
-            commodity_curves=market.commodity_curves,
+            commodity_curves=market.commodity_curves, calendars=market.calendars,
         )
         return self._compute_npv(trade, bumped_market) - base_npv
 
@@ -295,16 +317,20 @@ class FloatFloatSwapPricer(PricingEngine):
         fwd1 = YieldCurveInterpolator(market.yield_curves[trade.leg1_forward_curve_id])
         fwd2 = YieldCurveInterpolator(market.yield_curves[trade.leg2_forward_curve_id])
         today = market.as_of_date
+        cal = market.calendars.get(trade.calendar_name) if trade.calendar_name else None
+        conv = trade.business_day_convention
         notional_fn = lambda _: trade.notional  # noqa: E731
         leg1_pv = _float_leg_pv(
             disc, fwd1, trade.effective_date, trade.maturity_date,
             trade.leg1_frequency, trade.leg1_day_count, today,
             notional_fn, spread=trade.leg1_spread,
+            calendar=cal, convention=conv,
         )
         leg2_pv = _float_leg_pv(
             disc, fwd2, trade.effective_date, trade.maturity_date,
             trade.leg2_frequency, trade.leg2_day_count, today,
             notional_fn, spread=trade.leg2_spread,
+            calendar=cal, convention=conv,
         )
         return leg2_pv - leg1_pv if trade.pay_receive == PayReceive.PAY else leg1_pv - leg2_pv
 
@@ -330,6 +356,6 @@ class FloatFloatSwapPricer(PricingEngine):
         bumped_market = MarketSnapshot(
             as_of_date=market.as_of_date, yield_curves=bumped_curves,
             vol_surfaces=market.vol_surfaces, fx_rates=market.fx_rates,
-            commodity_curves=market.commodity_curves,
+            commodity_curves=market.commodity_curves, calendars=market.calendars,
         )
         return self._compute_npv(trade, bumped_market) - base_npv

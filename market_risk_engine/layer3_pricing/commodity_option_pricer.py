@@ -63,8 +63,11 @@ class CommodityFuturesOptionPricer(PricingEngine):
         vol_interp = VolSurfaceInterpolator(market.vol_surfaces[trade.vol_surface_id])
         today = market.as_of_date
 
-        T = year_fraction(today, trade.option_expiry, "ACT365")
-        t_fut = year_fraction(today, trade.futures_maturity, "ACT365")
+        cal = market.calendars.get(trade.calendar_name) if trade.calendar_name else None
+        option_expiry = cal.adjust(trade.option_expiry, trade.business_day_convention) if cal else trade.option_expiry
+        futures_maturity = cal.adjust(trade.futures_maturity, trade.business_day_convention) if cal else trade.futures_maturity
+        T = year_fraction(today, option_expiry, "ACT365")
+        t_fut = year_fraction(today, futures_maturity, "ACT365")
         F = comm.price_at(max(t_fut, 1e-6))
         df = disc.discount_factor(max(T, 1e-6))
         sigma = vol_interp.get_vol(max(T, 1e-4), trade.strike)

@@ -1,14 +1,18 @@
 """Load market data from CSV files into domain model objects."""
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
+from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 
+from ..common.date_utils import add_tenor, year_fraction
 from ..common.exceptions import MarketDataError
 from .models import CommodityCurve, FXRate, VolSurface, YieldCurve
+from .yield_curve import BootstrapInstrument, YieldCurveBuilder
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +44,163 @@ def load_yield_curves(path: str, as_of: date) -> Dict[str, YieldCurve]:
             zero_rates=grp["zero_rate"].tolist(),
             day_count=str(day_count),
         )
+    return curves
+
+
+def load_curve_file(csv_path: str, curve_name: str, meta: dict) -> YieldCurve:
+    """
+    Load a single yield-curve CSV file in the daily-delivery format::
+
+        Tenor,Rate,Date
+        1D,3.772627,3/12/2026
+        1W,3.78241,3/12/2026
+        ...
+
+    Parameters
+    ----------
+    csv_path  : path to the CSV file.
+    curve_name: logical name for this curve (e.g. ``"USD_SOFR"``).
+    meta      : metadata dict for this curve.  Keys:
+
+        currency          – ISO currency code, e.g. ``"USD"``
+        day_count         – ``ACT360``, ``ACT365``, ``30360``, ``ACTACT``
+                            (default: ``"ACT360"``)
+        rate_type         – ``"zero"`` or ``"par"`` (default: ``"zero"``)
+        rate_basis        – ``"percent"``, ``"bps"``, or ``"decimal"``
+                            (default: ``"percent"``)
+        interpolation     – ``cubic_spline``, ``log_linear``, ``linear``
+                            (default: ``"cubic_spline"``)
+        deposit_cutoff_yr – *par only* — tenors ≤ this year-fraction are
+                            bootstrapped as deposits; longer as swaps
+                            (default: ``1.0``)
+        payment_frequency – *par only* — swap coupon frequency
+                            (default: ``"SEMIANNUAL"``)
+    """
+    df = pd.read_csv(csv_path)
+    missing = {"Tenor", "Rate", "Date"} - set(df.columns)
+    if missing:
+        raise MarketDataError(
+            f"Missing columns {missing} in {csv_path}. Expected: Tenor, Rate, Date."
+        )
+
+    # Parse curve date — accept M/D/YYYY or YYYY-MM-DD
+    raw_date = str(df["Date"].dropna().iloc[0]).strip()
+    try:
+        as_of = datetime.strptime(raw_date, "%m/%d/%Y").date()
+    except ValueError:
+        try:
+            as_of = date.fromisoformat(raw_date)
+        except ValueError:
+            raise MarketDataError(
+                f"Cannot parse date '{raw_date}' in {csv_path}. "
+                "Expected M/D/YYYY or YYYY-MM-DD."
+            )
+
+    currency     = meta["currency"]
+    day_count    = meta.get("day_count", "ACT360")
+    rate_type    = meta.get("rate_type", "zero")
+    rate_basis   = meta.get("rate_basis", "percent")
+    interpolation = meta.get("interpolation", "cubic_spline")
+
+    _rate_factors = {"percent": 0.01, "bps": 0.0001, "decimal": 1.0}
+    if rate_basis not in _rate_factors:
+        raise MarketDataError(
+            f"Unknown rate_basis '{rate_basis}'. Expected: percent, bps, decimal."
+        )
+    rate_factor = _rate_factors[rate_basis]
+
+    # Convert tenor strings → year-fraction + decimal rate
+    pairs: list[tuple[float, float]] = []
+    for _, row in df.iterrows():
+        tenor_str = str(row["Tenor"]).strip()
+        maturity_date = add_tenor(as_of, tenor_str)
+        t = year_fraction(as_of, maturity_date, day_count)
+        r = float(row["Rate"]) * rate_factor
+        pairs.append((t, r))
+    pairs.sort()
+
+    if rate_type == "zero":
+        return YieldCurve(
+            currency=currency,
+            curve_name=curve_name,
+            as_of_date=as_of,
+            tenors=[p[0] for p in pairs],
+            zero_rates=[p[1] for p in pairs],
+            day_count=day_count,
+            interpolation=interpolation,
+        )
+
+    if rate_type == "par":
+        deposit_cutoff = float(meta.get("deposit_cutoff_yr", 1.0))
+        frequency = meta.get("payment_frequency", "SEMIANNUAL")
+        builder = YieldCurveBuilder(as_of, currency, curve_name)
+        for t, r in pairs:
+            inst_type = "deposit" if t <= deposit_cutoff else "swap"
+            builder.add_instrument(
+                BootstrapInstrument(
+                    instrument_type=inst_type,
+                    maturity=t,
+                    rate=r,
+                    day_count=day_count,
+                    payment_frequency=frequency,
+                )
+            )
+        yc = builder.bootstrap()
+        yc.interpolation = interpolation
+        return yc
+
+    raise MarketDataError(
+        f"Unknown rate_type '{rate_type}'. Expected: zero or par."
+    )
+
+
+def load_curve_directory(dir_path: str, as_of: date) -> Dict[str, YieldCurve]:
+    """
+    Load all yield curves from a directory that contains:
+
+    * One or more daily curve CSVs named ``{file_prefix}{YYYYMMDD}.csv``
+    * A ``curve_metadata.json`` file describing each curve
+
+    The metadata file is a JSON object keyed by logical curve name.  Example::
+
+        {
+          "USD_SOFR": {
+            "description": "USD SOFR zero curve",
+            "currency": "USD",
+            "day_count": "ACT360",
+            "rate_type": "zero",
+            "rate_basis": "percent",
+            "interpolation": "cubic_spline",
+            "file_prefix": "sofr_curve"
+          }
+        }
+
+    Returns a dict keyed by curve name.
+    """
+    meta_path = Path(dir_path) / "curve_metadata.json"
+    if not meta_path.exists():
+        raise MarketDataError(
+            f"curve_metadata.json not found in {dir_path}. "
+            "Create one to describe each curve's currency, day_count, etc."
+        )
+
+    with open(meta_path, encoding="utf-8") as f:
+        all_meta: dict = json.load(f)
+
+    date_str = as_of.strftime("%Y%m%d")
+    curves: Dict[str, YieldCurve] = {}
+
+    for curve_name, meta in all_meta.items():
+        prefix = meta.get("file_prefix", curve_name.lower())
+        filename = f"{prefix}{date_str}.csv"
+        file_path = Path(dir_path) / filename
+        if not file_path.exists():
+            raise MarketDataError(
+                f"No curve file found for '{curve_name}' on {as_of}: "
+                f"expected {file_path}"
+            )
+        curves[curve_name] = load_curve_file(str(file_path), curve_name, meta)
+
     return curves
 
 

@@ -7,7 +7,7 @@ from typing import Dict, Optional
 
 from lxml import etree
 
-from ..common.enums import OptionType, PayReceive
+from ..common.enums import BusinessDayConvention, OptionType, PayReceive
 from ..common.exceptions import PortfolioParseError
 from .models import (
     AmortizingIRS, CapFloor, CommodityFuturesOption, CommoditySwap,
@@ -41,6 +41,12 @@ def _opt_str(el: etree._Element, tag: str) -> Optional[str]:
     return text.strip() if text else None
 
 
+def _bdc(el: etree._Element) -> BusinessDayConvention:
+    """Read <BusinessDayConvention>; defaults to MODIFIED_FOLLOWING if absent."""
+    text = el.findtext("BusinessDayConvention")
+    return BusinessDayConvention(text.strip()) if text else BusinessDayConvention.MODIFIED_FOLLOWING
+
+
 # ---------------------------------------------------------------------------
 # Per-type parsers
 # ---------------------------------------------------------------------------
@@ -61,6 +67,8 @@ def _parse_irs(el: etree._Element, trade_id: str, ns_id: Optional[str]) -> IRS:
         discount_curve_id=_str(el, "DiscountCurveId"),
         forward_curve_id=_str(el, "ForwardCurveId"),
         netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
     )
 
 
@@ -80,6 +88,8 @@ def _parse_capfloor(el: etree._Element, trade_id: str, ns_id: Optional[str]) -> 
         discount_curve_id=_str(el, "DiscountCurveId"),
         forward_curve_id=_str(el, "ForwardCurveId"),
         netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
     )
 
 
@@ -99,6 +109,8 @@ def _parse_swaption(el: etree._Element, trade_id: str, ns_id: Optional[str]) -> 
         forward_curve_id=_str(el, "ForwardCurveId"),
         payment_frequency=el.findtext("PaymentFrequency", "SEMIANNUAL").strip(),
         netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
     )
 
 
@@ -115,6 +127,8 @@ def _parse_fxforward(el: etree._Element, trade_id: str, ns_id: Optional[str]) ->
         quote_discount_curve_id=_str(el, "QuoteDiscountCurveId"),
         fx_rate_id=_str(el, "FxRateId"),
         netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
     )
 
 
@@ -133,6 +147,8 @@ def _parse_fxoption(el: etree._Element, trade_id: str, ns_id: Optional[str]) -> 
         quote_discount_curve_id=_str(el, "QuoteDiscountCurveId"),
         fx_rate_id=_str(el, "FxRateId"),
         netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
     )
 
 
@@ -150,6 +166,8 @@ def _parse_commodity_swap(el: etree._Element, trade_id: str,
         commodity_curve_id=_str(el, "CommodityCurveId"),
         discount_curve_id=_str(el, "DiscountCurveId"),
         netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
     )
 
 
@@ -167,6 +185,8 @@ def _parse_commodity_futures_option(el: etree._Element, trade_id: str,
         discount_curve_id=_str(el, "DiscountCurveId"),
         commodity_curve_id=_str(el, "CommodityCurveId"),
         netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
     )
 
 
@@ -205,6 +225,8 @@ def _parse_amortizing_irs(el: etree._Element, trade_id: str,
         discount_curve_id=_str(el, "DiscountCurveId"),
         forward_curve_id=_str(el, "ForwardCurveId"),
         netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
     )
 
 
@@ -229,6 +251,8 @@ def _parse_float_float_swap(el: etree._Element, trade_id: str,
         pay_receive=PayReceive(_str(el, "PayReceive")),
         discount_curve_id=_str(el, "DiscountCurveId"),
         netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
     )
 
 

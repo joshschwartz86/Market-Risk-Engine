@@ -37,7 +37,9 @@ class SwaptionPricer(PricingEngine):
         vol_interp = VolSurfaceInterpolator(market.vol_surfaces[trade.vol_surface_id])
         today = market.as_of_date
 
-        T_exp = year_fraction(today, trade.option_expiry, "ACT365")
+        cal = market.calendars.get(trade.calendar_name) if trade.calendar_name else None
+        option_expiry = cal.adjust(trade.option_expiry, trade.business_day_convention) if cal else trade.option_expiry
+        T_exp = year_fraction(today, option_expiry, "ACT365")
         t_start = year_fraction(today, trade.underlying_start, "ACT365")
         t_end = year_fraction(today, trade.underlying_maturity, "ACT365")
 

@@ -39,7 +39,9 @@ class FXForwardPricer(PricingEngine):
         quote_disc = YieldCurveInterpolator(market.yield_curves[trade.quote_discount_curve_id])
         today = market.as_of_date
 
-        T = year_fraction(today, trade.delivery_date, "ACT360")
+        cal = market.calendars.get(trade.calendar_name) if trade.calendar_name else None
+        delivery = cal.adjust(trade.delivery_date, trade.business_day_convention) if cal else trade.delivery_date
+        T = year_fraction(today, delivery, "ACT360")
         if T <= 0:
             return PricingResult(trade_id=trade.trade_id, npv=0.0,
                                  currency=trade.quote_currency)

@@ -37,8 +37,11 @@ class CommoditySwapPricer(PricingEngine):
         disc = YieldCurveInterpolator(market.yield_curves[trade.discount_curve_id])
         today = market.as_of_date
 
+        cal = market.calendars.get(trade.calendar_name) if trade.calendar_name else None
         schedule = generate_schedule(trade.effective_date, trade.maturity_date,
-                                     trade.payment_frequency)
+                                     trade.payment_frequency,
+                                     calendar=cal,
+                                     convention=trade.business_day_convention)
         prev = trade.effective_date
         fixed_pv = 0.0
         float_pv = 0.0
