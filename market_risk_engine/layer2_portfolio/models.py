@@ -24,13 +24,20 @@ class IRS:
     fixed_day_count: str                # e.g. "30360"
     float_index: str                    # e.g. "SOFR", "EURIBOR_6M"
     float_day_count: str
-    payment_frequency: str              # "QUARTERLY", "SEMIANNUAL", "ANNUAL"
+    payment_frequency: str              # default frequency for both legs
     pay_receive: PayReceive             # PAY fixed or RECEIVE fixed
     discount_curve_id: str
     forward_curve_id: str
     netting_set_id: Optional[str] = None
     calendar_name: Optional[str] = None
     business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
+    # Per-leg frequency overrides (default to payment_frequency when None)
+    fixed_payment_frequency: Optional[str] = None
+    float_payment_frequency: Optional[str] = None
+    # Additive spread on the discount curve zero rate (decimal, e.g. 0.0010 = 1 bp)
+    discount_spread: float = 0.0
+    # Additive spread on every float period forward rate (decimal)
+    forward_spread: float = 0.0
 
 
 @dataclass
@@ -60,6 +67,10 @@ class AmortizingIRS:
     netting_set_id: Optional[str] = None
     calendar_name: Optional[str] = None
     business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
+    fixed_payment_frequency: Optional[str] = None
+    float_payment_frequency: Optional[str] = None
+    discount_spread: float = 0.0
+    forward_spread: float = 0.0
 
     def notional_at(self, payment_date: date) -> float:
         """Return the notional for the period ending on ``payment_date``."""
@@ -96,9 +107,49 @@ class FloatFloatSwap:
     # Common
     pay_receive: PayReceive = PayReceive.PAY
     discount_curve_id: str = ""
+    discount_spread: float = 0.0
     netting_set_id: Optional[str] = None
     calendar_name: Optional[str] = None
     business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
+
+
+@dataclass
+class AmortizingFloatFloatSwap:
+    """
+    Floating-for-floating (basis) swap with a step-down or step-up notional.
+
+    Mirrors ``AmortizingIRS`` but both legs are floating.  ``pay_receive``
+    applies to Leg 1: PAY means pay Leg 1 and receive Leg 2.  The notional
+    schedule maps each payment date to the outstanding notional for that period;
+    dates absent from the schedule fall back to ``initial_notional``.
+    """
+    trade_id: str
+    currency: str
+    initial_notional: float
+    notional_schedule: List[Tuple[date, float]]   # (payment_date, notional)
+    effective_date: date
+    maturity_date: date
+    leg1_index: str
+    leg1_day_count: str
+    leg1_frequency: str
+    leg1_forward_curve_id: str
+    leg1_spread: float = 0.0
+    leg2_index: str = ""
+    leg2_day_count: str = "ACT360"
+    leg2_frequency: str = "QUARTERLY"
+    leg2_forward_curve_id: str = ""
+    leg2_spread: float = 0.0
+    pay_receive: PayReceive = PayReceive.PAY
+    discount_curve_id: str = ""
+    discount_spread: float = 0.0
+    netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
+
+    def notional_at(self, payment_date: date) -> float:
+        """Return the notional for the period ending on ``payment_date``."""
+        lookup: Dict[date, float] = dict(self.notional_schedule)
+        return lookup.get(payment_date, self.initial_notional)
 
 
 @dataclass
@@ -120,6 +171,9 @@ class CapFloor:
     netting_set_id: Optional[str] = None
     calendar_name: Optional[str] = None
     business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
+    vol_model: str = "black"            # "black" (lognormal) or "bachelier" (normal)
+    discount_spread: float = 0.0
+    forward_spread: float = 0.0
 
 
 @dataclass
@@ -141,6 +195,12 @@ class Swaption:
     netting_set_id: Optional[str] = None
     calendar_name: Optional[str] = None
     business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
+    # Fixed leg frequency for the underlying swap (defaults to payment_frequency)
+    fixed_payment_frequency: Optional[str] = None
+    # Float leg frequency for the underlying swap (informational; FSR uses fixed leg)
+    float_payment_frequency: Optional[str] = None
+    discount_spread: float = 0.0
+    forward_spread: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +319,7 @@ class BermudanSwaption:
 # ---------------------------------------------------------------------------
 
 TradeUnion = Union[
-    IRS, AmortizingIRS, FloatFloatSwap,
+    IRS, AmortizingIRS, FloatFloatSwap, AmortizingFloatFloatSwap,
     CapFloor, Swaption, BermudanSwaption,
     FXForward, FXOption,
     CommoditySwap, CommodityFuturesOption,

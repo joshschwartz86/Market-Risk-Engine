@@ -4,9 +4,9 @@ from __future__ import annotations
 from typing import Dict, List, Type
 
 from ..layer2_portfolio.models import (
-    AmortizingIRS, BermudanSwaption, CapFloor, CommodityFuturesOption,
-    CommoditySwap, FloatFloatSwap, FXForward, FXOption, IRS, Portfolio,
-    Swaption, TradeUnion,
+    AmortizingFloatFloatSwap, AmortizingIRS, BermudanSwaption, CapFloor,
+    CommodityFuturesOption, CommoditySwap, FloatFloatSwap, FXForward, FXOption,
+    IRS, Portfolio, Swaption, TradeUnion,
 )
 from .base import MarketSnapshot, PricingEngine, PricingResult
 from .bermudan_swaption_pricer import BermudanSwaptionPricer
@@ -15,7 +15,10 @@ from .commodity_option_pricer import CommodityFuturesOptionPricer
 from .commodity_swap_pricer import CommoditySwapPricer
 from .fx_forward_pricer import FXForwardPricer
 from .fx_option_pricer import FXOptionPricer
-from .irs_pricer import AmortizingIRSPricer, FloatFloatSwapPricer, IRSPricer
+from .irs_pricer import (
+    AmortizingFloatFloatSwapPricer, AmortizingIRSPricer,
+    FloatFloatSwapPricer, IRSPricer,
+)
 from .swaption_pricer import SwaptionPricer
 
 
@@ -30,6 +33,7 @@ class PricingDispatcher:
             IRS: IRSPricer(),
             AmortizingIRS: AmortizingIRSPricer(),
             FloatFloatSwap: FloatFloatSwapPricer(),
+            AmortizingFloatFloatSwap: AmortizingFloatFloatSwapPricer(),
             CapFloor: CapFloorPricer(),
             Swaption: SwaptionPricer(),
             BermudanSwaption: BermudanSwaptionPricer(),

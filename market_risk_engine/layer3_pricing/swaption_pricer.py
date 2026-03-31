@@ -14,6 +14,16 @@ from ..layer2_portfolio.models import Swaption
 from .base import MarketSnapshot, PricingEngine, PricingResult
 
 
+def _sdf(disc: YieldCurveInterpolator, t: float, spread: float) -> float:
+    """Spread-adjusted discount factor (annual compounding): DF(t) * (1+s)^(-t)."""
+    if t <= 0.0:
+        return 1.0
+    df = disc.discount_factor(t)
+    if spread == 0.0:
+        return df
+    return df * (1.0 + spread) ** (-t)
+
+
 class SwaptionPricer(PricingEngine):
     """Price European swaptions using Black or Bachelier (normal) model."""
 
@@ -33,7 +43,6 @@ class SwaptionPricer(PricingEngine):
             raise PricingError(f"Missing vol surface '{trade.vol_surface_id}'.")
 
         disc = YieldCurveInterpolator(market.yield_curves[trade.discount_curve_id])
-        fwd_interp = YieldCurveInterpolator(market.yield_curves[trade.forward_curve_id])
         vol_interp = VolSurfaceInterpolator(market.vol_surfaces[trade.vol_surface_id])
         today = market.as_of_date
 
@@ -46,12 +55,18 @@ class SwaptionPricer(PricingEngine):
         if T_exp <= 0:
             return PricingResult(trade_id=trade.trade_id, npv=0.0, currency=trade.currency)
 
-        # Forward swap rate
-        F = fwd_interp.par_swap_rate(max(t_start, 1e-6), t_end,
-                                     trade.payment_frequency)
+        # Resolve per-leg frequency overrides (fall back to payment_frequency)
+        fixed_freq = trade.fixed_payment_frequency or trade.payment_frequency
 
-        # Annuity (PV01 of the underlying swap's fixed leg)
-        annuity = self._annuity(disc, t_start, t_end, trade.payment_frequency)
+        # Annuity using spread-adjusted discount factors
+        s_d = trade.discount_spread
+        annuity = self._annuity(disc, t_start, t_end, fixed_freq, s_d)
+
+        # Forward swap rate from first principles using spread-adjusted DFs,
+        # then add the additive forward spread
+        df_start = _sdf(disc, max(t_start, 1e-9), s_d)
+        df_end = _sdf(disc, t_end, s_d)
+        F = ((df_start - df_end) / annuity if annuity > 0 else 0.0) + trade.forward_spread
 
         sigma = vol_interp.get_vol(T_exp, trade.strike, forward=F)
 
@@ -81,14 +96,15 @@ class SwaptionPricer(PricingEngine):
 
     # ------------------------------------------------------------------
     def _annuity(self, disc: YieldCurveInterpolator,
-                 t_start: float, t_end: float, frequency: str) -> float:
+                 t_start: float, t_end: float, frequency: str,
+                 discount_spread: float = 0.0) -> float:
         freq_map = {"MONTHLY": 12, "QUARTERLY": 4, "SEMIANNUAL": 2, "ANNUAL": 1}
         n_per_year = freq_map[frequency.upper()]
         dt = 1.0 / n_per_year
         annuity = 0.0
         t = t_start + dt
         while t <= t_end + 1e-9:
-            annuity += dt * disc.discount_factor(t)
+            annuity += dt * _sdf(disc, t, discount_spread)
             t += dt
         return annuity
 

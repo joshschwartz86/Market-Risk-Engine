@@ -10,8 +10,9 @@ from lxml import etree
 from ..common.enums import BusinessDayConvention, OptionType, PayReceive
 from ..common.exceptions import PortfolioParseError
 from .models import (
-    AmortizingIRS, BermudanSwaption, CapFloor, CommodityFuturesOption,
-    CommoditySwap, FloatFloatSwap, FXForward, FXOption, IRS, Portfolio, Swaption,
+    AmortizingFloatFloatSwap, AmortizingIRS, BermudanSwaption, CapFloor,
+    CommodityFuturesOption, CommoditySwap, FloatFloatSwap, FXForward, FXOption,
+    IRS, Portfolio, Swaption,
 )
 
 
@@ -47,6 +48,12 @@ def _bdc(el: etree._Element) -> BusinessDayConvention:
     return BusinessDayConvention(text.strip()) if text else BusinessDayConvention.MODIFIED_FOLLOWING
 
 
+def _opt_float(el: etree._Element, tag: str, default: float = 0.0) -> float:
+    """Read an optional float element, returning ``default`` if absent."""
+    text = el.findtext(tag)
+    return float(text.strip()) if text else default
+
+
 # ---------------------------------------------------------------------------
 # Per-type parsers
 # ---------------------------------------------------------------------------
@@ -69,6 +76,10 @@ def _parse_irs(el: etree._Element, trade_id: str, ns_id: Optional[str]) -> IRS:
         netting_set_id=ns_id,
         calendar_name=_opt_str(el, "CalendarName"),
         business_day_convention=_bdc(el),
+        fixed_payment_frequency=_opt_str(el, "FixedPaymentFrequency"),
+        float_payment_frequency=_opt_str(el, "FloatPaymentFrequency"),
+        discount_spread=_opt_float(el, "DiscountSpread"),
+        forward_spread=_opt_float(el, "ForwardSpread"),
     )
 
 
@@ -90,6 +101,9 @@ def _parse_capfloor(el: etree._Element, trade_id: str, ns_id: Optional[str]) -> 
         netting_set_id=ns_id,
         calendar_name=_opt_str(el, "CalendarName"),
         business_day_convention=_bdc(el),
+        vol_model=el.findtext("VolModel", "black").strip(),
+        discount_spread=_opt_float(el, "DiscountSpread"),
+        forward_spread=_opt_float(el, "ForwardSpread"),
     )
 
 
@@ -111,6 +125,10 @@ def _parse_swaption(el: etree._Element, trade_id: str, ns_id: Optional[str]) -> 
         netting_set_id=ns_id,
         calendar_name=_opt_str(el, "CalendarName"),
         business_day_convention=_bdc(el),
+        fixed_payment_frequency=_opt_str(el, "FixedPaymentFrequency"),
+        float_payment_frequency=_opt_str(el, "FloatPaymentFrequency"),
+        discount_spread=_opt_float(el, "DiscountSpread"),
+        forward_spread=_opt_float(el, "ForwardSpread"),
     )
 
 
@@ -227,6 +245,10 @@ def _parse_amortizing_irs(el: etree._Element, trade_id: str,
         netting_set_id=ns_id,
         calendar_name=_opt_str(el, "CalendarName"),
         business_day_convention=_bdc(el),
+        fixed_payment_frequency=_opt_str(el, "FixedPaymentFrequency"),
+        float_payment_frequency=_opt_str(el, "FloatPaymentFrequency"),
+        discount_spread=_opt_float(el, "DiscountSpread"),
+        forward_spread=_opt_float(el, "ForwardSpread"),
     )
 
 
@@ -250,6 +272,53 @@ def _parse_float_float_swap(el: etree._Element, trade_id: str,
         leg2_spread=float(el.findtext("Leg2Spread", "0").strip()),
         pay_receive=PayReceive(_str(el, "PayReceive")),
         discount_curve_id=_str(el, "DiscountCurveId"),
+        discount_spread=_opt_float(el, "DiscountSpread"),
+        netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
+    )
+
+
+def _parse_amortizing_float_float_swap(
+    el: etree._Element, trade_id: str, ns_id: Optional[str]
+) -> AmortizingFloatFloatSwap:
+    """
+    XML structure for the notional schedule::
+
+        <NotionalSchedule>
+            <Entry date="2025-01-15" notional="8000000"/>
+            <Entry date="2026-01-15" notional="5000000"/>
+            ...
+        </NotionalSchedule>
+    """
+    sched_el = el.find("NotionalSchedule")
+    notional_schedule = []
+    if sched_el is not None:
+        for entry in sched_el.findall("Entry"):
+            entry_date = date.fromisoformat(entry.get("date", "").strip())
+            entry_notional = float(entry.get("notional", "0").strip())
+            notional_schedule.append((entry_date, entry_notional))
+
+    return AmortizingFloatFloatSwap(
+        trade_id=trade_id,
+        currency=_str(el, "Currency"),
+        initial_notional=_float(el, "InitialNotional"),
+        notional_schedule=notional_schedule,
+        effective_date=_date(el, "EffectiveDate"),
+        maturity_date=_date(el, "MaturityDate"),
+        leg1_index=_str(el, "Leg1Index"),
+        leg1_day_count=_str(el, "Leg1DayCount"),
+        leg1_frequency=_str(el, "Leg1Frequency"),
+        leg1_forward_curve_id=_str(el, "Leg1ForwardCurveId"),
+        leg1_spread=float(el.findtext("Leg1Spread", "0").strip()),
+        leg2_index=_str(el, "Leg2Index"),
+        leg2_day_count=_str(el, "Leg2DayCount"),
+        leg2_frequency=_str(el, "Leg2Frequency"),
+        leg2_forward_curve_id=_str(el, "Leg2ForwardCurveId"),
+        leg2_spread=float(el.findtext("Leg2Spread", "0").strip()),
+        pay_receive=PayReceive(_str(el, "PayReceive")),
+        discount_curve_id=_str(el, "DiscountCurveId"),
+        discount_spread=_opt_float(el, "DiscountSpread"),
         netting_set_id=ns_id,
         calendar_name=_opt_str(el, "CalendarName"),
         business_day_convention=_bdc(el),
@@ -302,6 +371,7 @@ _PARSERS = {
     "IRS": _parse_irs,
     "AmortizingIRS": _parse_amortizing_irs,
     "FloatFloatSwap": _parse_float_float_swap,
+    "AmortizingFloatFloatSwap": _parse_amortizing_float_float_swap,
     "CapFloor": _parse_capfloor,
     "Swaption": _parse_swaption,
     "BermudanSwaption": _parse_bermudan_swaption,
