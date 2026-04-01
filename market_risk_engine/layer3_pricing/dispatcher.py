@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Dict, List, Type
 
 from ..layer2_portfolio.models import (
-    AmortizingFloatFloatSwap, AmortizingIRS, BermudanSwaption, CapFloor,
+    AmortizingFloatFloatSwap, AmortizingIRS, AsianFXOption, BermudanSwaption, CapFloor,
     CommodityFuturesOption, CommoditySwap, FloatFloatSwap, FXForward, FXOption,
     IRS, Portfolio, Swaption, TradeUnion,
 )
@@ -14,6 +14,7 @@ from .cap_floor_pricer import CapFloorPricer
 from .commodity_option_pricer import CommodityFuturesOptionPricer
 from .commodity_swap_pricer import CommoditySwapPricer
 from .fx_forward_pricer import FXForwardPricer
+from .asian_fx_option_pricer import AsianFXOptionPricer
 from .fx_option_pricer import FXOptionPricer
 from .irs_pricer import (
     AmortizingFloatFloatSwapPricer, AmortizingIRSPricer,
@@ -39,6 +40,7 @@ class PricingDispatcher:
             BermudanSwaption: BermudanSwaptionPricer(),
             FXForward: FXForwardPricer(),
             FXOption: FXOptionPricer(),
+            AsianFXOption: AsianFXOptionPricer(),
             CommoditySwap: CommoditySwapPricer(),
             CommodityFuturesOption: CommodityFuturesOptionPricer(),
         }

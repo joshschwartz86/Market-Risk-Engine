@@ -59,3 +59,13 @@ class BusinessDayConvention(str, Enum):
     FOLLOWING = "FOLLOWING"
     MODIFIED_FOLLOWING = "MODIFIED_FOLLOWING"
     PRECEDING = "PRECEDING"
+
+
+class AveragingType(str, Enum):
+    ARITHMETIC = "ARITHMETIC"
+    GEOMETRIC = "GEOMETRIC"
+
+
+class AsianPayoffType(str, Enum):
+    AVERAGE_PRICE = "AVERAGE_PRICE"    # payoff vs fixed strike K
+    AVERAGE_STRIKE = "AVERAGE_STRIKE"  # payoff vs avg(S) as strike

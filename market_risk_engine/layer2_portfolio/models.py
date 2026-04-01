@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Dict, List, Optional, Tuple, Union
 
-from ..common.enums import BusinessDayConvention, OptionType, PayReceive
+from ..common.enums import AveragingType, AsianPayoffType, BusinessDayConvention, OptionType, PayReceive
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +245,41 @@ class FXOption:
     business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
 
 
+@dataclass
+class AsianFXOption:
+    """Asian (average rate) FX option — arithmetic or geometric averaging.
+
+    Supports:
+    - AVERAGE_PRICE: payoff vs a fixed strike K (avg(S) - K for CALL)
+    - AVERAGE_STRIKE: payoff vs the average itself as the strike (S_final - avg(S) for CALL)
+
+    Fixing schedule: supply either ``explicit_fixing_dates`` (takes priority) or
+    ``fixing_frequency`` (used with effective_date/maturity_date via generate_schedule).
+    Past fixings already observed must be provided in ``past_fixings``.
+    """
+    trade_id: str
+    base_currency: str
+    quote_currency: str
+    notional_base: float
+    effective_date: date                 # start of observation window
+    maturity_date: date                  # final fixing date / option expiry
+    delivery_date: date                  # cash settlement date
+    strike: float                        # fixed strike (AVERAGE_PRICE only)
+    option_type: OptionType              # CALL or PUT
+    payoff_type: AsianPayoffType
+    averaging_type: AveragingType
+    vol_surface_id: str
+    base_discount_curve_id: str
+    quote_discount_curve_id: str
+    fx_rate_id: str
+    explicit_fixing_dates: Optional[List[date]] = None   # takes priority over frequency
+    fixing_frequency: Optional[str] = None               # e.g. "MONTHLY"
+    past_fixings: Dict[date, float] = field(default_factory=dict)
+    netting_set_id: Optional[str] = None
+    calendar_name: Optional[str] = None
+    business_day_convention: BusinessDayConvention = BusinessDayConvention.MODIFIED_FOLLOWING
+
+
 # ---------------------------------------------------------------------------
 # Commodity Derivatives
 # ---------------------------------------------------------------------------
@@ -321,7 +356,7 @@ class BermudanSwaption:
 TradeUnion = Union[
     IRS, AmortizingIRS, FloatFloatSwap, AmortizingFloatFloatSwap,
     CapFloor, Swaption, BermudanSwaption,
-    FXForward, FXOption,
+    FXForward, FXOption, AsianFXOption,
     CommoditySwap, CommodityFuturesOption,
 ]
 

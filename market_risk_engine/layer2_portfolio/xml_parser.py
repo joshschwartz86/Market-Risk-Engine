@@ -7,10 +7,10 @@ from typing import Dict, Optional
 
 from lxml import etree
 
-from ..common.enums import BusinessDayConvention, OptionType, PayReceive
+from ..common.enums import AveragingType, AsianPayoffType, BusinessDayConvention, OptionType, PayReceive
 from ..common.exceptions import PortfolioParseError
 from .models import (
-    AmortizingFloatFloatSwap, AmortizingIRS, BermudanSwaption, CapFloor,
+    AmortizingFloatFloatSwap, AmortizingIRS, AsianFXOption, BermudanSwaption, CapFloor,
     CommodityFuturesOption, CommoditySwap, FloatFloatSwap, FXForward, FXOption,
     IRS, Portfolio, Swaption,
 )
@@ -164,6 +164,51 @@ def _parse_fxoption(el: etree._Element, trade_id: str, ns_id: Optional[str]) -> 
         base_discount_curve_id=_str(el, "BaseDiscountCurveId"),
         quote_discount_curve_id=_str(el, "QuoteDiscountCurveId"),
         fx_rate_id=_str(el, "FxRateId"),
+        netting_set_id=ns_id,
+        calendar_name=_opt_str(el, "CalendarName"),
+        business_day_convention=_bdc(el),
+    )
+
+
+def _parse_asian_fxoption(el: etree._Element, trade_id: str,
+                           ns_id: Optional[str]) -> AsianFXOption:
+    # explicit fixing dates — mirrors BermudanSwaption <ExerciseDates><Date> pattern
+    fixing_el = el.find("FixingDates")
+    explicit_fixing_dates = None
+    if fixing_el is not None:
+        explicit_fixing_dates = sorted(
+            date.fromisoformat(d.text.strip())
+            for d in fixing_el.findall("Date") if d.text
+        )
+
+    # past fixings — mirrors AmortizingIRS <NotionalSchedule><Entry date="" notional=""> pattern
+    past_fixings: Dict[date, float] = {}
+    pf_el = el.find("PastFixings")
+    if pf_el is not None:
+        for fix in pf_el.findall("Fixing"):
+            fix_date = date.fromisoformat(fix.get("date", "").strip())
+            fix_rate = float(fix.get("rate", "0").strip())
+            past_fixings[fix_date] = fix_rate
+
+    return AsianFXOption(
+        trade_id=trade_id,
+        base_currency=_str(el, "BaseCurrency"),
+        quote_currency=_str(el, "QuoteCurrency"),
+        notional_base=_float(el, "NotionalBase"),
+        effective_date=_date(el, "EffectiveDate"),
+        maturity_date=_date(el, "MaturityDate"),
+        delivery_date=_date(el, "DeliveryDate"),
+        strike=_float(el, "Strike"),
+        option_type=OptionType(_str(el, "OptionType")),
+        payoff_type=AsianPayoffType(_str(el, "PayoffType")),
+        averaging_type=AveragingType(_str(el, "AveragingType")),
+        vol_surface_id=_str(el, "VolSurfaceId"),
+        base_discount_curve_id=_str(el, "BaseDiscountCurveId"),
+        quote_discount_curve_id=_str(el, "QuoteDiscountCurveId"),
+        fx_rate_id=_str(el, "FxRateId"),
+        explicit_fixing_dates=explicit_fixing_dates,
+        fixing_frequency=_opt_str(el, "FixingFrequency"),
+        past_fixings=past_fixings,
         netting_set_id=ns_id,
         calendar_name=_opt_str(el, "CalendarName"),
         business_day_convention=_bdc(el),
@@ -377,6 +422,7 @@ _PARSERS = {
     "BermudanSwaption": _parse_bermudan_swaption,
     "FXForward": _parse_fxforward,
     "FXOption": _parse_fxoption,
+    "AsianFXOption": _parse_asian_fxoption,
     "CommoditySwap": _parse_commodity_swap,
     "CommodityFuturesOption": _parse_commodity_futures_option,
 }

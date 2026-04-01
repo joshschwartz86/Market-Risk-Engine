@@ -140,6 +140,63 @@
   </Trade>
 
   <!-- =============================================================== -->
+  <!-- Asian FX Option — explicit fixing dates + past fixings         -->
+  <!-- =============================================================== -->
+
+  <!-- 6m EUR/USD arithmetic average-price call, monthly fixings, 2 past fixings -->
+  <Trade id="ASIAN_FX_001" type="AsianFXOption">
+    <BaseCurrency>EUR</BaseCurrency>
+    <QuoteCurrency>USD</QuoteCurrency>
+    <NotionalBase>5000000</NotionalBase>
+    <EffectiveDate>2024-01-15</EffectiveDate>
+    <MaturityDate>2024-07-15</MaturityDate>
+    <DeliveryDate>2024-07-17</DeliveryDate>
+    <Strike>1.0950</Strike>
+    <OptionType>CALL</OptionType>
+    <PayoffType>AVERAGE_PRICE</PayoffType>
+    <AveragingType>ARITHMETIC</AveragingType>
+    <FixingDates>
+      <Date>2024-01-31</Date>
+      <Date>2024-02-29</Date>
+      <Date>2024-03-29</Date>
+      <Date>2024-04-30</Date>
+      <Date>2024-05-31</Date>
+      <Date>2024-06-28</Date>
+      <Date>2024-07-15</Date>
+    </FixingDates>
+    <PastFixings>
+      <Fixing date="2024-01-31" rate="1.0821"/>
+      <Fixing date="2024-02-29" rate="1.0890"/>
+    </PastFixings>
+    <VolSurfaceId>EURUSD</VolSurfaceId>
+    <BaseDiscountCurveId>EUR_ESTR</BaseDiscountCurveId>
+    <QuoteDiscountCurveId>USD_SOFR</QuoteDiscountCurveId>
+    <FxRateId>EURUSD</FxRateId>
+    <CalendarName>USD</CalendarName>
+    <BusinessDayConvention>MODIFIED_FOLLOWING</BusinessDayConvention>
+  </Trade>
+
+  <!-- Asian FX Option — frequency-derived fixing schedule -->
+  <!-- 3m EUR/USD geometric average-strike put, monthly fixings -->
+  <Trade id="ASIAN_FX_002" type="AsianFXOption">
+    <BaseCurrency>EUR</BaseCurrency>
+    <QuoteCurrency>USD</QuoteCurrency>
+    <NotionalBase>3000000</NotionalBase>
+    <EffectiveDate>2024-04-15</EffectiveDate>
+    <MaturityDate>2024-07-15</MaturityDate>
+    <DeliveryDate>2024-07-17</DeliveryDate>
+    <Strike>1.0875</Strike>
+    <OptionType>PUT</OptionType>
+    <PayoffType>AVERAGE_STRIKE</PayoffType>
+    <AveragingType>GEOMETRIC</AveragingType>
+    <FixingFrequency>MONTHLY</FixingFrequency>
+    <VolSurfaceId>EURUSD</VolSurfaceId>
+    <BaseDiscountCurveId>EUR_ESTR</BaseDiscountCurveId>
+    <QuoteDiscountCurveId>USD_SOFR</QuoteDiscountCurveId>
+    <FxRateId>EURUSD</FxRateId>
+  </Trade>
+
+  <!-- =============================================================== -->
   <!-- Commodity Swap                                                  -->
   <!-- =============================================================== -->
 
