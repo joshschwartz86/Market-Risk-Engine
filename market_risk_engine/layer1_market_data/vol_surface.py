@@ -134,16 +134,19 @@ class VolSurfaceInterpolator:
 
         # Clamp to grid boundaries
         expiry_c = float(np.clip(expiry, exp_arr[0], exp_arr[-1]))
-        strike_c = float(np.clip(strike, str_arr[0], str_arr[-1]))
 
         # Find surrounding indices for expiry
         ei = int(np.searchsorted(exp_arr, expiry_c, side="right")) - 1
         ei = max(0, min(ei, len(exp_arr) - 2))
+        t_e = (expiry_c - exp_arr[ei]) / (exp_arr[ei + 1] - exp_arr[ei] + 1e-15)
+
+        # Single-strike surface: interpolate expiry only, ignore strike dimension
+        if len(str_arr) == 1:
+            return float((1 - t_e) * vols[ei, 0] + t_e * vols[ei + 1, 0])
+
+        strike_c = float(np.clip(strike, str_arr[0], str_arr[-1]))
         si = int(np.searchsorted(str_arr, strike_c, side="right")) - 1
         si = max(0, min(si, len(str_arr) - 2))
-
-        # Interpolation weights
-        t_e = (expiry_c - exp_arr[ei]) / (exp_arr[ei + 1] - exp_arr[ei] + 1e-15)
         t_s = (strike_c - str_arr[si]) / (str_arr[si + 1] - str_arr[si] + 1e-15)
 
         v00 = vols[ei, si]
