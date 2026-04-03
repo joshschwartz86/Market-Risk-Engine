@@ -47,7 +47,7 @@ EURUSD = FXRate(
 
 USD_SWPTN_VOL = VolSurface(
     asset_id="USD_SWAPTION", as_of_date=TODAY,
-    strikes=[0.03, 0.04, 0.045, 0.05, 0.06],
+    strikes=[1.0, 2.0, 5.0, 7.0, 10.0],   # swap tenors (years)
     expiries=[0.25, 0.5, 1.0, 2.0],
     vols=np.full((4, 5), 0.245),
 )
@@ -310,9 +310,9 @@ def test_float_float_pay_receive_symmetry():
 _HW_NORMAL_VOL = VolSurface(
     asset_id="USD_BACHELIER",
     as_of_date=TODAY,
-    strikes=[0.03, 0.04, 0.045, 0.05, 0.055, 0.06],
+    strikes=[1.0, 2.0, 3.0, 4.0, 5.0],   # swap tenors (years)
     expiries=[0.5, 1.0, 2.0, 3.0, 4.0],
-    vols=np.full((5, 6), 0.0100),   # 100bp flat normal vol
+    vols=np.full((5, 5), 0.0100),   # 100bp flat normal vol
 )
 
 _HW_MARKET = MarketSnapshot(

@@ -277,6 +277,7 @@ def _coterminal_data(
 
         entries.append({
             "t0": t0,
+            "tenor": t_N - t0,
             "payment_times": payment_times,
             "coupon_amounts": coupon_amounts,
             "annuity": annuity,
@@ -320,7 +321,7 @@ def calibrate_hull_white(
         raise PricingError("No valid coterminal swaptions for HW calibration.")
 
     market_vols = [
-        vol_interp.get_vol(e["t0"], strike, forward=e["fsr"])
+        vol_interp.get_vol(e["t0"], e["tenor"], forward=e["fsr"])
         for e in entries
     ]
 

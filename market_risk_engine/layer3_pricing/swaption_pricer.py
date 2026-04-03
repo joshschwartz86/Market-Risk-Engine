@@ -68,7 +68,8 @@ class SwaptionPricer(PricingEngine):
         df_end = _sdf(disc, t_end, s_d)
         F = ((df_start - df_end) / annuity if annuity > 0 else 0.0) + trade.forward_spread
 
-        sigma = vol_interp.get_vol(T_exp, trade.strike, forward=F)
+        tenor = t_end - t_start
+        sigma = vol_interp.get_vol(T_exp, tenor, forward=F)
 
         if trade.vol_model.lower() == "bachelier":
             npv = self._bachelier(annuity, F, trade.strike, sigma, T_exp,
