@@ -1,11 +1,50 @@
-"""Unit tests for common utilities: Calendar and generate_schedule."""
+"""Unit tests for common utilities: Calendar, generate_schedule, year_fraction."""
 from datetime import date
 
 import pytest
 
 from market_risk_engine.common.calendar import Calendar
-from market_risk_engine.common.date_utils import generate_schedule
-from market_risk_engine.common.enums import BusinessDayConvention
+from market_risk_engine.common.date_utils import generate_schedule, year_fraction
+from market_risk_engine.common.enums import BusinessDayConvention, normalise_day_count
+
+
+# ---------------------------------------------------------------------------
+# Day count normalisation
+# ---------------------------------------------------------------------------
+
+_D1 = date(2024, 1, 15)
+_D2 = date(2025, 1, 15)
+
+@pytest.mark.parametrize("verbose,canonical", [
+    ("dayCount_Act_360", "ACT360"),
+    ("dayCount_Act_365", "ACT365"),
+    ("dayCount_30_360",  "30360"),
+    ("dayCount_Act_Act", "ACTACT"),
+])
+def test_normalise_day_count_maps_verbose_to_canonical(verbose, canonical):
+    assert normalise_day_count(verbose) == canonical
+
+
+def test_normalise_day_count_passes_through_canonical():
+    """Canonical strings are returned unchanged."""
+    for s in ("ACT360", "ACT365", "30360", "ACTACT"):
+        assert normalise_day_count(s) == s
+
+
+@pytest.mark.parametrize("verbose,canonical", [
+    ("dayCount_Act_360", "ACT360"),
+    ("dayCount_Act_365", "ACT365"),
+    ("dayCount_30_360",  "30360"),
+    ("dayCount_Act_Act", "ACTACT"),
+])
+def test_year_fraction_verbose_equals_canonical(verbose, canonical):
+    """year_fraction with verbose format returns the same value as canonical."""
+    assert year_fraction(_D1, _D2, verbose) == year_fraction(_D1, _D2, canonical)
+
+
+def test_year_fraction_unknown_day_count_raises():
+    with pytest.raises(ValueError):
+        year_fraction(_D1, _D2, "UNKNOWN_FORMAT")
 
 
 # ---------------------------------------------------------------------------

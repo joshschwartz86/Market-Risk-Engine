@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING, Optional
 
-from .enums import BusinessDayConvention, DayCount
+from .enums import BusinessDayConvention, DayCount, normalise_day_count
 
 if TYPE_CHECKING:
     from .calendar import Calendar
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 def year_fraction(start: date, end: date, day_count: str) -> float:
     """Compute the year fraction between two dates under the given day count convention."""
-    dc = DayCount(day_count) if not isinstance(day_count, DayCount) else day_count
+    dc = day_count if isinstance(day_count, DayCount) else DayCount(normalise_day_count(day_count))
 
     if dc == DayCount.ACT360:
         return (end - start).days / 360.0

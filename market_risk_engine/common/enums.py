@@ -8,6 +8,25 @@ class DayCount(str, Enum):
     ACT_ACT = "ACTACT"
 
 
+_DAYCOUNT_ALIASES: dict[str, str] = {
+    "dayCount_Act_360": "ACT360",
+    "dayCount_Act_365": "ACT365",
+    "dayCount_30_360":  "30360",
+    "dayCount_Act_Act": "ACTACT",
+}
+
+
+def normalise_day_count(s: str) -> str:
+    """Map verbose incoming day count format to the canonical DayCount string.
+
+    Accepts both the compact canonical form (e.g. ``"ACT360"``) and the
+    verbose form supplied by upstream systems (e.g. ``"dayCount_Act_360"``).
+    Unknown strings are returned unchanged so that ``DayCount(...)`` can
+    raise its own ``ValueError`` with a meaningful message.
+    """
+    return _DAYCOUNT_ALIASES.get(s, s)
+
+
 class Compounding(str, Enum):
     CONTINUOUS = "CONTINUOUS"
     ANNUAL = "ANNUAL"
