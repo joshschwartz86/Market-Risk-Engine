@@ -323,7 +323,8 @@ _HW_MARKET = MarketSnapshot(
 
 
 def _make_bermudan(exercise_dates, n_steps=80, opt_type=OptionType.PAYER,
-                   strike=0.05):
+                   strike=0.05, fixed_payment_frequency=None,
+                   float_payment_frequency=None):
     return BermudanSwaption(
         trade_id="BERM",
         currency="USD",
@@ -337,6 +338,8 @@ def _make_bermudan(exercise_dates, n_steps=80, opt_type=OptionType.PAYER,
         discount_curve_id="USD_SOFR",
         forward_curve_id="USD_SOFR",
         payment_frequency="SEMIANNUAL",
+        fixed_payment_frequency=fixed_payment_frequency,
+        float_payment_frequency=float_payment_frequency,
         day_count="ACT365",
         n_tree_steps=n_steps,
     )
@@ -552,6 +555,21 @@ def test_swaption_split_frequency_vs_default():
     # Annual coupon payments → slightly different annuity → different NPV (not necessarily bigger/smaller,
     # but the two should differ)
     assert abs(r_semi.npv - r_ann.npv) > 0.0
+
+
+def test_bermudan_split_payment_frequency():
+    """Annual fixed / quarterly float: prices successfully with NPV > 0."""
+    from market_risk_engine.layer3_pricing.bermudan_swaption_pricer import (
+        BermudanSwaptionPricer,
+    )
+    trade = _make_bermudan(
+        [date(2025, 1, 15), date(2026, 1, 15), date(2027, 1, 15)],
+        fixed_payment_frequency="ANNUAL",
+        float_payment_frequency="QUARTERLY",
+    )
+    result = BermudanSwaptionPricer().price(trade, _HW_MARKET)
+    assert result.error is None, result.error
+    assert result.npv > 0
 
 
 # ---------------------------------------------------------------------------

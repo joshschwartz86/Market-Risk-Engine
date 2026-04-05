@@ -103,10 +103,12 @@ class SwaptionPricer(PricingEngine):
         n_per_year = freq_map[frequency.upper()]
         dt = 1.0 / n_per_year
         annuity = 0.0
-        t = t_start + dt
-        while t <= t_end + 1e-9:
+        # Step backward from t_end so the final coupon is pinned exactly to
+        # the maturity date, avoiding accumulated floating-point drift.
+        t = t_end
+        while t > t_start + 1e-9:
             annuity += dt * _sdf(disc, t, discount_spread)
-            t += dt
+            t -= dt
         return annuity
 
     def _black(self, annuity: float, F: float, K: float, sigma: float,

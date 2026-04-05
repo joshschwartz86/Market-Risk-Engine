@@ -6,7 +6,8 @@
       "Bash(dir \"C:\\\\Users\\\\jrs4v\\\\Desktop\\\\Python Projects\\\\Market-Risk-Engine\")",
       "Bash(python -c \"import tests.test_common; print\\(''ok''\\)\")",
       "Bash(python -m pytest -x -q)",
-      "Bash(python -m pytest -q --deselect tests/test_layer2_portfolio.py::test_parse_portfolio_trade_count)"
+      "Bash(python -m pytest -q --deselect tests/test_layer2_portfolio.py::test_parse_portfolio_trade_count)",
+      "Bash(python -m pytest tests/test_layer3_pricing.py -x -q --tb=short)"
     ]
   }
 }

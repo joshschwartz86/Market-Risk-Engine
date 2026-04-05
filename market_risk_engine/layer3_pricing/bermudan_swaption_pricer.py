@@ -249,7 +249,7 @@ def _coterminal_data(
     (same maturity, exercised at that date) and compute its annuity and FSR.
     """
     freq_map = {"MONTHLY": 12, "QUARTERLY": 4, "SEMIANNUAL": 2, "ANNUAL": 1}
-    dt_swap = 1.0 / freq_map[payment_frequency.upper()]
+    dt_fixed = 1.0 / freq_map[payment_frequency.upper()]
     t_N = year_fraction(today, swap_maturity, day_count)
 
     entries: List[dict] = []
@@ -258,19 +258,25 @@ def _coterminal_data(
         if t0 <= 0.0 or t0 >= t_N - 1e-6:
             continue
 
+        # Step backward from t_N so the final coupon is pinned exactly to
+        # the maturity date, avoiding accumulated floating-point drift.
         payment_times: List[float] = []
         coupon_amounts: List[float] = []
-        t = t0 + dt_swap
-        while t <= t_N + 1e-9:
-            is_last = (t + dt_swap > t_N + 1e-9)
+        t = t_N
+        while t > t0 + 1e-9:
             payment_times.append(t)
-            coupon_amounts.append(strike * dt_swap + (1.0 if is_last else 0.0))
-            t += dt_swap
+            coupon_amounts.append(strike * dt_fixed)
+            t -= dt_fixed
+        payment_times.reverse()
+        coupon_amounts.reverse()
+        # The last payment (index -1 after reversal) returns the principal.
+        if coupon_amounts:
+            coupon_amounts[-1] += 1.0
 
         if not payment_times:
             continue
 
-        annuity = sum(dt_swap * disc.discount_factor(ti) for ti in payment_times)
+        annuity = sum(dt_fixed * disc.discount_factor(ti) for ti in payment_times)
         df_t0 = disc.discount_factor(t0)
         df_tN = disc.discount_factor(t_N)
         fsr = (df_t0 - df_tN) / annuity if annuity > 1e-12 else strike
@@ -462,15 +468,19 @@ def _price_bermudan_tree(
             cont = df * (pu * V[ju + jmax] + pm * V[jm + jmax] + pd * V[jd + jmax])
 
             if is_exercise:
-                # Intrinsic = max(0, swap PV at this node)
-                pv_bonds = sum(
+                # Intrinsic = max(0, swap PV at this node).
+                # Fixed leg: sum of discounted fixed coupons (no principal).
+                # Float leg: telescopes to 1 − P(t_curr, T_N) for flat SOFR/LIBOR,
+                #            regardless of floating payment frequency.
+                fixed_pv = sum(
                     ci * hw.bond_price(t_curr, ti, r)
                     for ci, ti in zip(cas, pt)
                 )
+                float_pv = 1.0 - hw.bond_price(t_curr, T_N, r)
                 if opt_type == OptionType.PAYER:
-                    intrinsic = notional * max(0.0, 1.0 - pv_bonds)
+                    intrinsic = notional * max(0.0, float_pv - fixed_pv)
                 else:
-                    intrinsic = notional * max(0.0, pv_bonds - 1.0)
+                    intrinsic = notional * max(0.0, fixed_pv - float_pv)
                 V_new[idx] = max(cont, intrinsic)
             else:
                 V_new[idx] = cont
@@ -520,6 +530,7 @@ class BermudanSwaptionPricer(PricingEngine):
         disc = YieldCurveInterpolator(market.yield_curves[trade.discount_curve_id])
         vol_interp = VolSurfaceInterpolator(market.vol_surfaces[trade.vol_surface_id])
         day_count = trade.day_count
+        fixed_freq = trade.fixed_payment_frequency or trade.payment_frequency
 
         # ---- calendar-adjust exercise dates ----
         cal = market.calendars.get(trade.calendar_name) if trade.calendar_name else None
@@ -541,7 +552,7 @@ class BermudanSwaptionPricer(PricingEngine):
         # ---- calibrate HW to coterminal swaptions ----
         a, sigma = calibrate_hull_white(
             ex_dates, trade.underlying_maturity, trade.strike,
-            trade.payment_frequency, day_count, trade.option_type,
+            fixed_freq, day_count, trade.option_type,
             today, disc, vol_interp, notional=1.0,
         )
         hw = HullWhiteModel(a, sigma, disc)
@@ -551,7 +562,7 @@ class BermudanSwaptionPricer(PricingEngine):
         dt = t_N / n_steps
 
         freq_map = {"MONTHLY": 12, "QUARTERLY": 4, "SEMIANNUAL": 2, "ANNUAL": 1}
-        dt_swap = 1.0 / freq_map[trade.payment_frequency.upper()]
+        delta_fixed = 1.0 / freq_map[fixed_freq.upper()]
 
         exercise_steps: Set[int] = set()
         step_to_paydata: Dict[int, Tuple[List[float], List[float]]] = {}
@@ -561,16 +572,17 @@ class BermudanSwaptionPricer(PricingEngine):
             step = int(round(t0 / dt))
             step = max(0, min(step, n_steps - 1))
 
+            # Step backward from t_N so the final coupon is pinned exactly to
+            # the maturity date, avoiding accumulated floating-point drift.
             payment_times: List[float] = []
-            coupon_amounts: List[float] = []
-            t = t0 + dt_swap
-            while t <= t_N + 1e-9:
-                is_last = (t + dt_swap > t_N + 1e-9)
+            t = t_N
+            while t > t0 + 1e-9:
                 payment_times.append(t)
-                coupon_amounts.append(
-                    trade.strike * dt_swap + (1.0 if is_last else 0.0)
-                )
-                t += dt_swap
+                t -= delta_fixed
+            payment_times.reverse()
+            # Pure fixed coupons only — no principal bundled.
+            # The tree prices the floating leg explicitly as 1 − P(t_curr, T_N).
+            coupon_amounts = [trade.strike * delta_fixed] * len(payment_times)
 
             if payment_times:
                 exercise_steps.add(step)

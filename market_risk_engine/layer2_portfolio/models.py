@@ -342,6 +342,8 @@ class BermudanSwaption:
     discount_curve_id: str
     forward_curve_id: str
     payment_frequency: str = "SEMIANNUAL"
+    fixed_payment_frequency: Optional[str] = None   # overrides payment_frequency for fixed leg; affects pricing
+    float_payment_frequency: Optional[str] = None   # stored only; float leg telescopes to par at exercise dates
     day_count: str = "ACT365"
     n_tree_steps: int = 100             # number of trinomial-tree time steps
     netting_set_id: Optional[str] = None
